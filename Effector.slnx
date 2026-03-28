@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/Effector.Sample.App/Effector.Sample.App.csproj" />
+    <Project Path="samples/Effector.Sample.Effects/Effector.Sample.Effects.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Effector.Build.Tasks/Effector.Build.Tasks.csproj" />
+    <Project Path="src/Effector/Effector.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Effector.Build.Tasks.Tests/Effector.Build.Tasks.Tests.csproj" />
+    <Project Path="tests/Effector.Runtime.Tests/Effector.Runtime.Tests.csproj" />
+  </Folder>
+</Solution>

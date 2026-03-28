@@ -61,6 +61,7 @@ BenchmarkDotNet.Artifacts/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+.codex/
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
@@ -399,3 +400,4 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+/.idea

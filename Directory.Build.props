@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' != ''">true</ContinuousIntegrationBuild>
+    <Company>Wieslaw Soltes</Company>
+    <Authors>Wieslaw Soltes</Authors>
+    <Product>Effector</Product>
+    <RepositoryUrl>https://github.com/wieslawsoltes/Effector</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/wieslawsoltes/Effector</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <EffectorVersion>0.1.0</EffectorVersion>
+    <AvaloniaVersion>11.3.12</AvaloniaVersion>
+    <SkiaSharpVersion>3.119.2</SkiaSharpVersion>
+    <RootNamespace Condition="'$(RootNamespace)' == ''">$(MSBuildProjectName)</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <EffectorEnabled Condition="'$(EffectorEnabled)' == ''">true</EffectorEnabled>
+    <EffectorStrict Condition="'$(EffectorStrict)' == ''">true</EffectorStrict>
+    <EffectorVerbose Condition="'$(EffectorVerbose)' == ''">false</EffectorVerbose>
+    <EffectorSupportedAvaloniaVersion Condition="'$(EffectorSupportedAvaloniaVersion)' == ''">11.3.12</EffectorSupportedAvaloniaVersion>
+  </PropertyGroup>
+</Project>

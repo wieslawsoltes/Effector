@@ -1,0 +1,37 @@
+<Project>
+  <PropertyGroup>
+    <_EffectorPackagedTaskAssemblyPath Condition="'$(_EffectorPackagedTaskAssemblyPath)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)Effector.Build.Tasks.dll'))</_EffectorPackagedTaskAssemblyPath>
+    <_EffectorLocalTaskProjectPath Condition="'$(_EffectorLocalTaskProjectPath)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\Effector.Build.Tasks\Effector.Build.Tasks.csproj'))</_EffectorLocalTaskProjectPath>
+    <_EffectorLocalTaskAssemblyPath Condition="'$(_EffectorLocalTaskAssemblyPath)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0\Effector.Build.Tasks.dll'))</_EffectorLocalTaskAssemblyPath>
+    <_EffectorTaskAssemblyPath Condition="'$(_EffectorTaskAssemblyPath)' == '' and Exists('$(_EffectorPackagedTaskAssemblyPath)')">$(_EffectorPackagedTaskAssemblyPath)</_EffectorTaskAssemblyPath>
+    <_EffectorTaskAssemblyPath Condition="'$(_EffectorTaskAssemblyPath)' == '' and Exists('$(_EffectorLocalTaskProjectPath)')">$(_EffectorLocalTaskAssemblyPath)</_EffectorTaskAssemblyPath>
+  </PropertyGroup>
+
+  <UsingTask TaskName="Effector.Build.Tasks.WeaveSkiaEffectsTask"
+             AssemblyFile="$(_EffectorTaskAssemblyPath)"
+             Condition="'$(EffectorEnabled)' == 'true' and '$(_EffectorTaskAssemblyPath)' != ''" />
+
+  <Target Name="Effector_BuildLocalTask"
+          Condition="'$(EffectorEnabled)' == 'true' and !Exists('$(_EffectorPackagedTaskAssemblyPath)') and Exists('$(_EffectorLocalTaskProjectPath)')">
+    <MSBuild Projects="$(_EffectorLocalTaskProjectPath)"
+             Targets="Build"
+             BuildInParallel="false"
+             Properties="Configuration=$(Configuration);DesignTimeBuild=false;BuildingProject=false" />
+  </Target>
+
+  <Target Name="Effector_WeaveSkiaEffects"
+          AfterTargets="CoreCompile"
+          BeforeTargets="CopyFilesToOutputDirectory"
+          DependsOnTargets="Effector_BuildLocalTask"
+          Condition="'$(EffectorEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true' and '@(IntermediateAssembly)' != ''">
+    <Error Condition="!Exists('$(_EffectorTaskAssemblyPath)')"
+           Text="[Effector.Build] Task assembly was not found at '$(_EffectorTaskAssemblyPath)'." />
+
+    <WeaveSkiaEffectsTask AssemblyPath="@(IntermediateAssembly->'%(FullPath)')"
+                          Strict="$(EffectorStrict)"
+                          Verbose="$(EffectorVerbose)"
+                          ProjectDirectory="$(MSBuildProjectDirectory)"
+                          ReferencePaths="@(ReferencePath);@(ReferenceCopyLocalPaths)"
+                          SupportedAvaloniaVersion="$(EffectorSupportedAvaloniaVersion)" />
+  </Target>
+</Project>
