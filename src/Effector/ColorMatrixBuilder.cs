@@ -101,7 +101,9 @@ public sealed class ColorMatrixBuilder
     public static float[] CreateBrightnessContrast(float brightness, float contrast)
     {
         var c = contrast;
-        var translation = ((1f - c) * 128f) + (brightness * 255f);
+        // SkiaSharp 3's image-filter color-matrix path behaves correctly with
+        // normalized channel offsets here, not 0..255 translation values.
+        var translation = ((1f - c) * 0.5f) + brightness;
 
         return new[]
         {
@@ -116,7 +118,7 @@ public sealed class ColorMatrixBuilder
     {
         var a = Clamp01(amount);
         var diagonal = 1f - (2f * a);
-        var translation = 255f * a;
+        var translation = a;
 
         return new[]
         {

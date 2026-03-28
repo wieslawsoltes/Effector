@@ -389,6 +389,56 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void BrightnessContrastFilter_Uses_Working_SkiaSharp3_ColorMatrix_Offsets()
+    {
+        using var filter = new BrightnessContrastEffectFactory().CreateFilter(
+            new object[] { 0d, 1.47d },
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false));
+
+        Assert.NotNull(filter);
+
+        var pixel = ApplyEffectFilterViaSaveLayer(new SKColor(0x33, 0x99, 0xCC, 0xFF), filter!);
+
+        Assert.Equal((byte)15, pixel.Red);
+        Assert.Equal((byte)165, pixel.Green);
+        Assert.Equal((byte)240, pixel.Blue);
+        Assert.Equal((byte)255, pixel.Alpha);
+    }
+
+    [Fact]
+    public void InvertFilter_Uses_Working_SkiaSharp3_ColorMatrix_Offsets()
+    {
+        using var filter = new InvertEffectFactory().CreateFilter(
+            new object[] { 1d },
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false));
+
+        Assert.NotNull(filter);
+
+        var pixel = ApplyEffectFilterViaSaveLayer(new SKColor(0x33, 0x99, 0xCC, 0xFF), filter!);
+
+        Assert.Equal((byte)0xCC, pixel.Red);
+        Assert.Equal((byte)0x66, pixel.Green);
+        Assert.Equal((byte)0x33, pixel.Blue);
+        Assert.Equal((byte)0xFF, pixel.Alpha);
+    }
+
+    [Fact]
+    public void InvertFilter_PartialAmount_DoesNot_WhiteOut_Content()
+    {
+        using var filter = new InvertEffectFactory().CreateFilter(
+            new object[] { 0.06d },
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false));
+
+        Assert.NotNull(filter);
+
+        var pixel = ApplyEffectFilterViaSaveLayer(new SKColor(0x33, 0x99, 0xCC, 0xFF), filter!);
+
+        Assert.InRange(pixel.Red, 55, 65);
+        Assert.InRange(pixel.Green, 145, 155);
+        Assert.InRange(pixel.Blue, 190, 200);
+        Assert.Equal((byte)0xFF, pixel.Alpha);
+    }
+
     public void SampleEffectsAssembly_ContainsGeneratedWovenTypes()
     {
         var assembly = typeof(TintEffect).Assembly;
@@ -1119,6 +1169,47 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public async Task SampleWindow_InvertEffect_AfterPreview_IsNotNearWhite()
+    {
+        await Session.Dispatch(() =>
+        {
+            var window = new MainWindow
+            {
+                Width = 1600,
+                Height = 1200
+            };
+
+            window.Show();
+            window.UpdateLayout();
+
+            var host = window.GetVisualDescendants()
+                .OfType<Grid>()
+                .FirstOrDefault(static grid => grid.Effect is InvertEffect);
+            Assert.NotNull(host);
+
+            host!.BringIntoView();
+            window.UpdateLayout();
+
+            var invertEffect = Assert.IsType<InvertEffect>(host.Effect);
+            invertEffect.Amount = 0.06d;
+            window.UpdateLayout();
+
+            using var frame = window.CaptureRenderedFrame();
+            Assert.NotNull(frame);
+
+            var topLeft = host.TranslatePoint(new Point(0, 0), window);
+            Assert.True(topLeft.HasValue);
+
+            var sampleX = (int)Math.Round(topLeft!.Value.X + (host.Bounds.Width * 0.18d));
+            var sampleY = (int)Math.Round(topLeft.Value.Y + (host.Bounds.Height * 0.22d));
+            var pixel = GetPixel(frame!, sampleX, sampleY);
+
+            Assert.False(
+                pixel.Red > 240 && pixel.Green > 240 && pixel.Blue > 240,
+                $"Expected partial invert preview content at {sampleX},{sampleY}, but sampled near-white pixel {pixel.Red},{pixel.Green},{pixel.Blue}.");
+        }, CancellationToken.None);
+    }
+
     public async Task SampleWindow_ScanlineShaderEffect_IsAligned_To_AfterPreviewBounds()
     {
         await Session.Dispatch(() =>
@@ -1752,6 +1843,30 @@ public sealed class EffectorRuntimeBehaviorTests
         using var skBitmap = SKBitmap.Decode(stream);
         Assert.NotNull(skBitmap);
         return skBitmap!.GetPixel(x, y);
+    }
+
+    private static SKColor ApplyEffectFilterViaSaveLayer(SKColor sourceColor, SKImageFilter filter)
+    {
+        using var bitmap = ApplyEffectFilterViaSaveLayer(
+            1,
+            1,
+            filter,
+            canvas => canvas.Clear(sourceColor));
+        return bitmap.GetPixel(0, 0);
+    }
+
+    private static SKBitmap ApplyEffectFilterViaSaveLayer(int width, int height, SKImageFilter filter, Action<SKCanvas> drawSource)
+    {
+        var bitmap = new SKBitmap(width, height);
+        using var surface = SKSurface.Create(new SKImageInfo(width, height));
+        using var paint = new SKPaint { ImageFilter = filter };
+        surface.Canvas.SaveLayer(paint);
+        drawSource(surface.Canvas);
+        surface.Canvas.Restore();
+        surface.Canvas.Flush();
+        using var filteredImage = surface.Snapshot();
+        filteredImage.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0);
+        return bitmap;
     }
 
     private static T ReadProperty<T>(object instance, string propertyName)
