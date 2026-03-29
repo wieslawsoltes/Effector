@@ -1,0 +1,147 @@
+name: Package Integration
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - "feature/**"
+      - "release/**"
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  SAMPLE_AOT_RUNTIME_IDENTIFIER: osx-arm64
+
+jobs:
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version-prefix: ${{ steps.version.outputs.version-prefix }}
+      version-suffix: ${{ steps.version.outputs.version-suffix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION_PREFIX=$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' Directory.Build.props)
+
+          if [[ "${GITHUB_REF}" == refs/heads/release/* ]]; then
+            VERSION_SUFFIX=""
+          else
+            VERSION_SUFFIX="-ci.${GITHUB_RUN_NUMBER}"
+          fi
+
+          echo "version-prefix=${VERSION_PREFIX}" >> "${GITHUB_OUTPUT}"
+          echo "version-suffix=${VERSION_SUFFIX}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION_PREFIX}${VERSION_SUFFIX}" >> "${GITHUB_OUTPUT}"
+
+  package-integration:
+    name: Package Consumer Integration (macOS)
+    runs-on: macos-14
+    needs: version
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Prepare local package feed
+        run: mkdir -p artifacts/local-feed artifacts/integration-screenshots artifacts/test/integration
+
+      - name: Restore Effector package project
+        run: dotnet restore src/Effector/Effector.csproj
+
+      - name: Build Effector package project
+        run: dotnet build src/Effector/Effector.csproj -c Release -m:1 --no-restore -p:GeneratePackageOnBuild=false -p:Version="${{ needs.version.outputs.version }}"
+
+      - name: Pack Effector package
+        run: dotnet pack src/Effector/Effector.csproj -c Release --no-build -p:GeneratePackageOnBuild=false -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg -p:Version="${{ needs.version.outputs.version }}" -o artifacts/local-feed
+
+      - name: Clear restored Effector package cache
+        run: rm -rf "${HOME}/.nuget/packages/effector/${{ needs.version.outputs.version }}"
+
+      - name: Restore integration app
+        run: dotnet restore integration/Effector.PackageIntegration.App/Effector.PackageIntegration.App.csproj --configfile integration/NuGet.config --no-cache -p:EffectorPackageVersion="${{ needs.version.outputs.version }}"
+
+      - name: Build integration app
+        run: dotnet build integration/Effector.PackageIntegration.App/Effector.PackageIntegration.App.csproj -c Release -m:1 --no-restore -p:EffectorPackageVersion="${{ needs.version.outputs.version }}"
+
+      - name: Restore integration tests
+        run: dotnet restore integration/Effector.PackageIntegration.Tests/Effector.PackageIntegration.Tests.csproj --configfile integration/NuGet.config --no-cache -p:EffectorPackageVersion="${{ needs.version.outputs.version }}"
+
+      - name: Build integration tests
+        run: dotnet build integration/Effector.PackageIntegration.Tests/Effector.PackageIntegration.Tests.csproj -c Release -m:1 --no-restore -p:EffectorPackageVersion="${{ needs.version.outputs.version }}"
+
+      - name: Run package integration tests
+        run: |
+          AVALONIA_SCREENSHOT_DIR="${GITHUB_WORKSPACE}/artifacts/integration-screenshots" \
+          DYLD_LIBRARY_PATH="${GITHUB_WORKSPACE}/integration/Effector.PackageIntegration.Tests/bin/Release/net8.0/runtimes/osx/native" \
+          dotnet test integration/Effector.PackageIntegration.Tests/Effector.PackageIntegration.Tests.csproj -c Release --no-build --logger trx --results-directory artifacts/test/integration -p:EffectorPackageVersion="${{ needs.version.outputs.version }}"
+
+      - name: Run integration desktop app
+        run: EFFECTOR_PACKAGE_INTEGRATION_AUTO_EXIT=1 dotnet run --project integration/Effector.PackageIntegration.App/Effector.PackageIntegration.App.csproj -c Release --no-build --no-restore -- --exit
+
+      - name: Publish integration app with NativeAOT
+        run: dotnet publish integration/Effector.PackageIntegration.App/Effector.PackageIntegration.App.csproj -c Release -r "${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}" --configfile integration/NuGet.config --no-cache -p:EffectorPackageVersion="${{ needs.version.outputs.version }}" -p:PublishAot=true -p:StripSymbols=false -p:GeneratePackageOnBuild=false
+
+      - name: Run NativeAOT integration app
+        run: EFFECTOR_PACKAGE_INTEGRATION_AUTO_EXIT=1 "./integration/Effector.PackageIntegration.App/bin/Release/net8.0/${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}/publish/Effector.PackageIntegration.App" --exit
+
+      - name: Archive NativeAOT integration app
+        run: ditto -c -k --sequesterRsrc --keepParent "integration/Effector.PackageIntegration.App/bin/Release/net8.0/${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}/publish" "artifacts/Effector.PackageIntegration.App-${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}-aot.zip"
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: package-integration-test-results
+          path: artifacts/test/integration/**/*.trx
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish integration test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Package Integration Tests
+          path: artifacts/test/integration/**/*.trx
+          reporter: dotnet-trx
+          fail-on-empty: false
+
+      - name: Upload integration screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: package-integration-screenshots
+          path: artifacts/integration-screenshots/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload integration NativeAOT artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-integration-nativeaot-${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}
+          path: artifacts/Effector.PackageIntegration.App-${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}-aot.zip
+          if-no-files-found: error
+          retention-days: 14

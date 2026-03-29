@@ -1,6 +1,7 @@
 # Effector
 
 [![Build](https://img.shields.io/github/actions/workflow/status/wieslawsoltes/Effector/build.yml?branch=main&label=build)](https://github.com/wieslawsoltes/Effector/actions/workflows/build.yml)
+[![Integration](https://img.shields.io/github/actions/workflow/status/wieslawsoltes/Effector/integration.yml?branch=main&label=integration)](https://github.com/wieslawsoltes/Effector/actions/workflows/integration.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/wieslawsoltes/Effector/release.yml?label=release)](https://github.com/wieslawsoltes/Effector/actions/workflows/release.yml)
 
 Effector brings extensible Skia-backed custom effects to Avalonia `11.3.12` while preserving the public `Visual.Effect : IEffect?` contract. It combines compile-time effect weaving, app-local Avalonia assembly patching, immutable render-thread snapshots, runtime shader support, input-driven effects, and NativeAOT-aware packaging.
@@ -306,6 +307,12 @@ The repository also validates this path in CI on macOS using a NativeAOT publish
   - reusable sample effect library
 - `samples/Effector.Sample.App`
   - effect gallery and AOT validation sample
+- `integration/Effector.PackageIntegration.Effects`
+  - package-fed consumer effect library restored from the generated `Effector` NuGet package
+- `integration/Effector.PackageIntegration.App`
+  - package-fed desktop smoke app that can auto-exit in CI
+- `integration/Effector.PackageIntegration.Tests`
+  - package-fed headless render tests that verify the packed NuGet works end to end
 - `tests/Effector.Build.Tasks.Tests`
   - metadata and patcher tests
 - `tests/Effector.Runtime.Tests`
@@ -368,6 +375,54 @@ dotnet pack src/Effector/Effector.csproj \
   -o artifacts/packages
 ```
 
+Run the package-consumer integration lane locally:
+
+```bash
+dotnet pack src/Effector/Effector.csproj \
+  -c Release \
+  -m:1 \
+  -p:GeneratePackageOnBuild=false \
+  -p:IncludeSymbols=true \
+  -p:SymbolPackageFormat=snupkg \
+  -o artifacts/local-feed
+
+rm -rf ~/.nuget/packages/effector/0.1.0
+
+dotnet restore integration/Effector.PackageIntegration.App/Effector.PackageIntegration.App.csproj \
+  --configfile integration/NuGet.config \
+  --no-cache \
+  -p:EffectorPackageVersion=0.1.0
+
+dotnet build integration/Effector.PackageIntegration.Tests/Effector.PackageIntegration.Tests.csproj \
+  -c Release \
+  -m:1 \
+  --no-restore \
+  -p:EffectorPackageVersion=0.1.0
+
+AVALONIA_SCREENSHOT_DIR=$PWD/artifacts/integration-screenshots \
+DYLD_LIBRARY_PATH=$PWD/integration/Effector.PackageIntegration.Tests/bin/Release/net8.0/runtimes/osx/native \
+dotnet test integration/Effector.PackageIntegration.Tests/Effector.PackageIntegration.Tests.csproj \
+  -c Release \
+  --no-build
+
+EFFECTOR_PACKAGE_INTEGRATION_AUTO_EXIT=1 \
+dotnet run --project integration/Effector.PackageIntegration.App/Effector.PackageIntegration.App.csproj \
+  -c Release \
+  --no-build \
+  --no-restore \
+  -- --exit
+
+dotnet publish integration/Effector.PackageIntegration.App/Effector.PackageIntegration.App.csproj \
+  -c Release \
+  -r osx-arm64 \
+  --configfile integration/NuGet.config \
+  --no-cache \
+  -p:EffectorPackageVersion=0.1.0 \
+  -p:PublishAot=true \
+  -p:StripSymbols=false \
+  -p:GeneratePackageOnBuild=false
+```
+
 Because `Effector.dll` is self-weaved in place after build, use `-m:1` or another sequential build strategy for clean solution builds. Parallel graph builds can race the self-weaver and produce stale compile surfaces.
 
 ## CI and Release
@@ -384,6 +439,15 @@ The repository ships two GitHub Actions workflows:
   - run the same validation path for tagged or manually dispatched releases
   - push `Effector` packages to NuGet
   - create a GitHub release with attached package artifacts
+
+There is also a dedicated package-consumer workflow:
+
+- `integration.yml`
+  - packs the current `Effector` build into a local NuGet feed
+  - restores dedicated integration projects from that feed
+  - runs package-fed headless render tests
+  - runs a package-fed desktop smoke app with `--exit`
+  - NativeAOT publishes and runs the package-fed integration app
 
 ## Limitations
 
