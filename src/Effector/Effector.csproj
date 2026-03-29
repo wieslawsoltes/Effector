@@ -10,8 +10,11 @@
     <IncludeBuildOutput>true</IncludeBuildOutput>
     <IsPackable>true</IsPackable>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);Effector_AddBuildTaskPayloadToPackage</TargetsForTfmSpecificContentInPackage>
     <_EffectorSelfWeaverProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.SelfWeaver\Effector.SelfWeaver.csproj'))</_EffectorSelfWeaverProjectPath>
     <_EffectorSelfWeaverDllPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.SelfWeaver\bin\$(Configuration)\net8.0\Effector.SelfWeaver.dll'))</_EffectorSelfWeaverDllPath>
+    <_EffectorBuildTasksProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.Build.Tasks\Effector.Build.Tasks.csproj'))</_EffectorBuildTasksProjectPath>
+    <_EffectorBuildTasksOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0'))</_EffectorBuildTasksOutputDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -46,24 +49,33 @@
     <Exec Command="dotnet &quot;$(_EffectorSelfWeaverDllPath)&quot; &quot;$(TargetPath)&quot;" />
   </Target>
 
+  <Target Name="Effector_BuildPackTaskProject"
+          Condition="'$(DesignTimeBuild)' != 'true' and Exists('$(_EffectorBuildTasksProjectPath)')">
+    <MSBuild Projects="$(_EffectorBuildTasksProjectPath)"
+             Targets="Restore"
+             BuildInParallel="false"
+             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun"
+             Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;DesignTimeBuild=false;BuildingProject=false;BuildProjectReferences=false" />
+    <MSBuild Projects="$(_EffectorBuildTasksProjectPath)"
+             Targets="Build"
+             BuildInParallel="false"
+             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun"
+             Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;DesignTimeBuild=false;BuildingProject=false;BuildProjectReferences=false" />
+  </Target>
+
+  <Target Name="Effector_AddBuildTaskPayloadToPackage"
+          DependsOnTargets="Effector_BuildSelfWeaver;Effector_BuildPackTaskProject"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(TargetFramework)' == 'netstandard2.0'">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(_EffectorBuildTasksOutputDir)\*.dll">
+        <PackagePath>buildTransitive/%(Filename)%(Extension)</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\Effector.Build\buildTransitive\Effector.Build.props" Pack="true" PackagePath="buildTransitive/Effector.props" />
     <None Include="..\Effector.Build\buildTransitive\Effector.Build.targets" Pack="true" PackagePath="buildTransitive/Effector.targets" />
-    <None Include="..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0\Effector.Build.Tasks.dll"
-          Pack="true"
-          PackagePath="buildTransitive/Effector.Build.Tasks.dll"
-          Visible="false"
-          Condition="Exists('..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0\Effector.Build.Tasks.dll')" />
-    <None Include="..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0\Mono.Cecil.dll"
-          Pack="true"
-          PackagePath="buildTransitive/Mono.Cecil.dll"
-          Visible="false"
-          Condition="Exists('..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0\Mono.Cecil.dll')" />
-    <None Include="..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0\System.Reflection.Metadata.dll"
-          Pack="true"
-          PackagePath="buildTransitive/System.Reflection.Metadata.dll"
-          Visible="false"
-          Condition="Exists('..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0\System.Reflection.Metadata.dll')" />
   </ItemGroup>
 </Project>
