@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Effector;
 using SkiaSharp;
 
 namespace Effector.Sample.Effects;

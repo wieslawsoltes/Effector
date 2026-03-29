@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Media;
+using Effector;
 using SkiaSharp;
 
 namespace Effector.Sample.Effects;
