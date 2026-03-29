@@ -207,7 +207,7 @@ jobs:
         run: dotnet restore src/Effector/Effector.csproj
 
       - name: Build package project
-        run: dotnet build src/Effector/Effector.csproj -c Release -m:1 --no-restore -p:GeneratePackageOnBuild=false -p:Version="${{ needs.version.outputs.version }}"
+        run: dotnet build src/Effector/Effector.csproj -c Release -m:1 --no-restore -p:EffectorPreparePackPayload=true -p:GeneratePackageOnBuild=false -p:Version="${{ needs.version.outputs.version }}"
 
       - name: Pack
         run: dotnet pack src/Effector/Effector.csproj -c Release --no-build -p:GeneratePackageOnBuild=false -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg -p:Version="${{ needs.version.outputs.version }}" -o artifacts/packages
