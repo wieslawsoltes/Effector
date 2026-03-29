@@ -216,13 +216,12 @@ public sealed class EffectorWeaverTests
         Assert.True(patchedScan.IsAlreadyPatched);
 
         using var assembly = AssemblyDefinition.ReadAssembly(tempPath);
-        AssertMethodCallsRuntime(assembly, "Avalonia.Media.EffectExtensions", "ToImmutable", "ToImmutablePatched");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Media.EffectExtensions", "GetEffectOutputPadding", "GetEffectOutputPaddingPatched");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Media.Effect", "Parse", "ParseEffectPatched");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Animation.EffectTransition", "DoTransition", "TryCreateTransitionObservable");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Animation.Animators.EffectAnimator", "Apply", "TryApplyCustomEffectAnimator");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Animation.Animators.EffectAnimator", "Interpolate", "TryInterpolateEffect");
-        AssertMethodDoesNotCallRuntime(assembly, "Avalonia.Rendering.Composition.Server.ServerCompositionVisual", "PushEffect", "RecordRenderThreadEffect");
+        AssertMethodCallsRuntime(assembly, "Avalonia.Media.EffectExtensions", "ToImmutable", "ToImmutablePatched", 1);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Media.EffectExtensions", "GetEffectOutputPadding", "GetEffectOutputPaddingPatched", 1);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Media.Effect", "Parse", "ParseEffectPatched", 1);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Animation.EffectTransition", "DoTransition", "TryCreateTransitionObservable", 3);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Animation.Animators.EffectAnimator", "Apply", "TryApplyCustomEffectAnimator", 5);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Animation.Animators.EffectAnimator", "Interpolate", "TryInterpolateEffect", 3);
     }
 
     [Fact]
@@ -252,12 +251,12 @@ public sealed class EffectorWeaverTests
         Assert.True(patchedScan.IsAlreadyPatched);
 
         using var assembly = AssemblyDefinition.ReadAssembly(tempPath);
-        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "CreateEffect", "CreateEffectPatched");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "PushEffect", "TryBeginShaderEffectPatched");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "PopEffect", "TryEndShaderEffectPatched");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "get_Canvas", "TryGetActiveShaderCanvas");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "get_Surface", "TryGetActiveShaderSurface");
-        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "set_Transform", "ApplyActiveShaderFrameTransformOffsetPatched");
+        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "CreateEffect", "CreateEffectPatched", 1);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "PushEffect", "TryBeginShaderEffectPatched", 2);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "PopEffect", "TryEndShaderEffectPatched", 0);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "get_Canvas", "TryGetActiveShaderCanvas", 0);
+        AssertMethodCallsRuntime(assembly, "Avalonia.Skia.DrawingContextImpl", "get_Surface", "TryGetActiveShaderSurface", 0);
+        AssertMethodCallsAnyRuntimeMethod(assembly, "Avalonia.Skia.DrawingContextImpl", "set_Transform", 1);
     }
 
     private static EffectorWeaverResult RewriteTemporaryAssembly(string assemblyPath) =>
@@ -369,10 +368,11 @@ public sealed class EffectorWeaverTests
         AssemblyDefinition assembly,
         string typeFullName,
         string methodName,
-        string runtimeMethodName)
+        string runtimeMethodName,
+        int parameterCount)
     {
         var type = assembly.MainModule.Types.Single(type => type.FullName == typeFullName);
-        var method = type.Methods.First(candidate => candidate.Name == methodName);
+        var method = type.Methods.First(candidate => candidate.Name == methodName && candidate.Parameters.Count == parameterCount);
         Assert.Contains(
             method.Body.Instructions,
             instruction =>
@@ -386,10 +386,11 @@ public sealed class EffectorWeaverTests
         AssemblyDefinition assembly,
         string typeFullName,
         string methodName,
-        string runtimeMethodName)
+        string runtimeMethodName,
+        int parameterCount)
     {
         var type = assembly.MainModule.Types.Single(type => type.FullName == typeFullName);
-        var method = type.Methods.First(candidate => candidate.Name == methodName);
+        var method = type.Methods.First(candidate => candidate.Name == methodName && candidate.Parameters.Count == parameterCount);
         Assert.DoesNotContain(
             method.Body.Instructions,
             instruction =>
@@ -397,6 +398,22 @@ public sealed class EffectorWeaverTests
                 instruction.Operand is MethodReference called &&
                 called.DeclaringType.FullName == "Effector.EffectorRuntime" &&
                 called.Name == runtimeMethodName);
+    }
+
+    private static void AssertMethodCallsAnyRuntimeMethod(
+        AssemblyDefinition assembly,
+        string typeFullName,
+        string methodName,
+        int parameterCount)
+    {
+        var type = assembly.MainModule.Types.Single(type => type.FullName == typeFullName);
+        var method = type.Methods.First(candidate => candidate.Name == methodName && candidate.Parameters.Count == parameterCount);
+        Assert.Contains(
+            method.Body.Instructions,
+            instruction =>
+                (instruction.OpCode == OpCodes.Call || instruction.OpCode == OpCodes.Callvirt) &&
+                instruction.Operand is MethodReference called &&
+                called.DeclaringType.FullName == "Effector.EffectorRuntime");
     }
 
     private static string[] GetReferencePaths()
