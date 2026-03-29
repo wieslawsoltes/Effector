@@ -1,5 +1,9 @@
 name: Package Integration
 
+permissions:
+  contents: read
+  checks: write
+
 concurrency:
   group: integration-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -117,12 +121,12 @@ jobs:
         with:
           name: package-integration-test-results
           path: artifacts/test/integration/**/*.trx
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Publish integration test results
         uses: dorny/test-reporter@v1
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           name: Package Integration Tests
           path: artifacts/test/integration/**/*.trx

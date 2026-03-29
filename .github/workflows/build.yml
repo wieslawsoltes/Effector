@@ -1,5 +1,9 @@
 name: Build
 
+permissions:
+  contents: read
+  checks: write
+
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -86,7 +90,7 @@ jobs:
 
       - name: Publish build task test results
         uses: dorny/test-reporter@v1
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           name: Build Task Tests
           path: artifacts/test/build-tasks/**/*.trx
@@ -132,7 +136,7 @@ jobs:
 
       - name: Publish runtime test results
         uses: dorny/test-reporter@v1
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           name: Runtime Tests
           path: artifacts/test/runtime/**/*.trx
