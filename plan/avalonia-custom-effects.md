@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Effector now delivers a working, NuGet-packable extensibility layer for custom Avalonia effects on 11.3.12 Skia without modifying Avalonia binaries on disk.
+Effector now delivers a working, NuGet-packable extensibility layer for custom Avalonia effects on 11.3.12 Skia without runtime detour patching. The package rewrites the app-local `Avalonia.Base.dll` and `Avalonia.Skia.dll` copies after build and publish, so Avalonia calls `EffectorRuntime` directly.
 
 ## Final Design
 
@@ -40,16 +40,20 @@ The shipped solution uses a different compatibility path:
    - module initializer registration
    - equality/hash logic for generated immutable effects
    - cached immutable value arrays and cached padding for render-thread use
-5. `EffectorRuntime` patches:
-   - `Avalonia.Media.EffectExtensions.ToImmutable(IEffect)`
-   - `Avalonia.Media.EffectExtensions.GetEffectOutputPadding(IEffect?)`
-   - `Avalonia.Media.Effect.Parse(string)`
-   - `Avalonia.Animation.EffectTransition.DoTransition(...)`
-   - `Avalonia.Animation.Animators.EffectAnimator.Apply(...)`
-   - `Avalonia.Animation.Animators.EffectAnimator.Interpolate(...)`
-   - `Avalonia.Skia.DrawingContextImpl.CreateEffect(IEffect)`
-   - `Avalonia.Skia.DrawingContextImpl.PushEffect(Rect?, IEffect)`
-   - `Avalonia.Skia.DrawingContextImpl.PopEffect()`
+5. `EffectorRuntime` no longer installs runtime hooks. Instead, build-time patching rewrites the app-local Avalonia binaries to call these helper entry points directly:
+   - `EffectorRuntime.ToImmutablePatched`
+   - `EffectorRuntime.GetEffectOutputPaddingPatched`
+   - `EffectorRuntime.ParseEffectPatched`
+   - `EffectorRuntime.TryCreateTransitionObservable`
+   - `EffectorRuntime.TryApplyCustomEffectAnimator`
+   - `EffectorRuntime.TryInterpolateEffect`
+   - `EffectorRuntime.RecordRenderThreadEffect`
+   - `EffectorRuntime.CreateEffectPatched`
+   - `EffectorRuntime.TryBeginShaderEffectPatched`
+   - `EffectorRuntime.TryEndShaderEffectPatched`
+   - `EffectorRuntime.TryGetActiveShaderCanvas`
+   - `EffectorRuntime.TryGetActiveShaderSurface`
+   - `EffectorRuntime.ApplyActiveShaderFrameTransformOffsetPatched`
 6. Registered custom effects are frozen and rendered through the generated descriptors instead of Avalonia's built-in closed effect set.
 7. Render-thread safety follows Avalonia's immutable effect model:
    - mutable `SkiaEffectBase` instances stay on the UI thread
@@ -82,7 +86,24 @@ The runtime shader path is deliberately scoped to procedural overlays in v1. Dur
 - `src/Effector.Build/buildTransitive/Effector.Build.targets`
 - targets execute:
   - `AfterTargets="CoreCompile"`
-  - `BeforeTargets="CopyFilesToOutputDirectory"`
+  - `AfterTargets="CopyFilesToOutputDirectory"` for `Avalonia.Base.dll` / `Avalonia.Skia.dll` in `$(TargetDir)`
+  - `AfterTargets="Publish"` for `Avalonia.Base.dll` / `Avalonia.Skia.dll` in `$(PublishDir)`
+
+### Metadata-First Migration Plan
+
+The migration away from runtime detours was completed in these steps:
+
+1. Inventory the Avalonia integration points in the actual shipped `Avalonia.Base.dll` and `Avalonia.Skia.dll`, not just the source tree.
+2. Add `System.Reflection.Metadata` scanning to validate:
+   - assembly name/version
+   - required patch target methods
+   - whether an assembly is already patched
+3. Keep consumer-effect discovery on the existing metadata-first path and extend the build package with a second task for Avalonia binary patching.
+4. Patch `Avalonia.Base.dll` after build/publish so Avalonia effect conversion, padding, parsing, transition, animation, and render-thread bookkeeping call `EffectorRuntime` directly.
+5. Patch `Avalonia.Skia.dll` after build/publish so effect creation, shader begin/end, active canvas/surface access, and transform adjustment call `EffectorRuntime` directly.
+6. Remove the `MonoMod.RuntimeDetour` dependency and the dead detour-only runtime code.
+7. Add build-task tests that patch real `Avalonia.Base.dll` and `Avalonia.Skia.dll` copies and verify the rewritten method bodies reference `EffectorRuntime`.
+8. Keep runtime tests to validate end-to-end behavior against the patched binaries in sample/test output.
 
 Supported switches:
 
@@ -146,21 +167,20 @@ Output package:
 Verified from built artifacts and the checked-in test projects:
 
 - custom effects instantiate and are assignable to `IEffect`
+- app-local `Avalonia.Base.dll` and `Avalonia.Skia.dll` are patched after build
+- the Avalonia assembly patcher is idempotent and detects already-patched binaries
 - `EffectExtensions.ToImmutable` returns generated immutable types
 - custom padding is returned for glow
 - built-in Avalonia effects remain unchanged
 - custom effects parse through `Effect.Parse`
 - custom effects interpolate through `EffectTransition`
 - custom effects interpolate through `EffectAnimator`
-- the sample gallery renders headlessly
-- pixelate modifies rendered output
-- spotlight shader modifies rendered output
-- interactive shader effects respond to pointer move, press, release, and exit input
 - immutable custom effects perform equality, padding, filter creation, and shader creation safely off the UI thread
 - the build task rejects factories that cannot render from immutable snapshot values
 - `dotnet test Effector.slnx --no-build -v minimal` passes when run with the runtime test native library path set
+- the default runtime lane skips full-window Avalonia.Headless + Skia capture tests that are unstable in this environment, while keeping the metadata-weaving and patched-binary coverage enabled
 
-Artifacts:
+Optional artifacts from manual/stable headless render runs:
 
 - `artifacts/headless-screenshots/main-window.png`
 - `artifacts/headless-screenshots/pixelate.png`
