@@ -166,15 +166,13 @@ jobs:
         run: dotnet build src/Effector/Effector.csproj -c Release -m:1 --no-restore -p:EffectorPreparePackPayload=true -p:GeneratePackageOnBuild=false -p:Version="${{ needs.version.outputs.version }}"
 
       - name: Pack
-        run: dotnet pack src/Effector/Effector.csproj -c Release --no-build -p:GeneratePackageOnBuild=false -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg -p:Version="${{ needs.version.outputs.version }}" -o artifacts/packages
+        run: dotnet pack src/Effector/Effector.csproj -c Release --no-build -p:GeneratePackageOnBuild=false -p:Version="${{ needs.version.outputs.version }}" -o artifacts/packages
 
       - name: Upload NuGet packages
         uses: actions/upload-artifact@v4
         with:
           name: release-nuget-packages
-          path: |
-            artifacts/packages/*.nupkg
-            artifacts/packages/*.snupkg
+          path: artifacts/packages/*.nupkg
           if-no-files-found: error
           retention-days: 90
 
@@ -200,7 +198,7 @@ jobs:
       - name: Publish packages
         run: |
           shopt -s nullglob
-          for package in packages/*.nupkg packages/*.snupkg; do
+          for package in packages/*.nupkg; do
             dotnet nuget push "$package" \
               --api-key "${{ secrets.NUGET_API_KEY }}" \
               --source https://api.nuget.org/v3/index.json \
@@ -241,7 +239,6 @@ jobs:
           generate_release_notes: true
           files: |
             packages/*.nupkg
-            packages/*.snupkg
             aot-sample/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -8,6 +8,8 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <GeneratePackageOnBuild Condition="'$(PublishAot)' == 'true'">false</GeneratePackageOnBuild>
     <IncludeBuildOutput>true</IncludeBuildOutput>
+    <IncludeSymbols>false</IncludeSymbols>
+    <SymbolPackageFormat></SymbolPackageFormat>
     <IsPackable>true</IsPackable>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
     <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);Effector_AddBuildTaskPayloadToPackage</TargetsForTfmSpecificContentInPackage>

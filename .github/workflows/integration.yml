@@ -80,7 +80,7 @@ jobs:
         run: dotnet build src/Effector/Effector.csproj -c Release -m:1 --no-restore -p:EffectorPreparePackPayload=true -p:GeneratePackageOnBuild=false -p:Version="${{ needs.version.outputs.version }}"
 
       - name: Pack Effector package
-        run: dotnet pack src/Effector/Effector.csproj -c Release --no-build -p:GeneratePackageOnBuild=false -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg -p:Version="${{ needs.version.outputs.version }}" -o artifacts/local-feed
+        run: dotnet pack src/Effector/Effector.csproj -c Release --no-build -p:GeneratePackageOnBuild=false -p:Version="${{ needs.version.outputs.version }}" -o artifacts/local-feed
 
       - name: Clear restored Effector package cache
         run: rm -rf "${HOME}/.nuget/packages/effector/${{ needs.version.outputs.version }}"

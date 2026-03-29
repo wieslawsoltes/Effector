@@ -370,10 +370,10 @@ dotnet build src/Effector/Effector.csproj -c Release -m:1 -p:GeneratePackageOnBu
 dotnet pack src/Effector/Effector.csproj \
   -c Release \
   --no-build \
-  -p:IncludeSymbols=true \
-  -p:SymbolPackageFormat=snupkg \
   -o artifacts/packages
 ```
+
+`Effector` currently publishes only the primary `.nupkg`. The runtime assembly is post-processed and duplicated into the MSBuild task payload, so a NuGet `.snupkg` does not validate reliably with the current package layout.
 
 Run the package-consumer integration lane locally:
 
@@ -382,8 +382,6 @@ dotnet pack src/Effector/Effector.csproj \
   -c Release \
   -m:1 \
   -p:GeneratePackageOnBuild=false \
-  -p:IncludeSymbols=true \
-  -p:SymbolPackageFormat=snupkg \
   -o artifacts/local-feed
 
 rm -rf ~/.nuget/packages/effector/0.1.0
