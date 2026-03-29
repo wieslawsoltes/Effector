@@ -17,10 +17,15 @@
   <Target Name="Effector_BuildLocalTask"
           Condition="'$(EffectorEnabled)' == 'true' and !Exists('$(_EffectorPackagedTaskAssemblyPath)') and Exists('$(_EffectorLocalTaskProjectPath)')">
     <MSBuild Projects="$(_EffectorLocalTaskProjectPath)"
+             Targets="Restore"
+             BuildInParallel="false"
+             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild"
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false" />
+    <MSBuild Projects="$(_EffectorLocalTaskProjectPath)"
              Targets="Build"
              BuildInParallel="false"
-             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun"
-             Properties="Configuration=$(Configuration);GeneratePackageOnBuild=false;DesignTimeBuild=false;BuildingProject=false" />
+             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild"
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false" />
   </Target>
 
   <Target Name="Effector_WeaveSkiaEffects"

@@ -4,11 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Effector.Sample.App</AssemblyName>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <_EffectorRuntimeProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\src\Effector\Effector.csproj'))</_EffectorRuntimeProjectPath>
-    <_EffectorRuntimeAotDllPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\src\Effector\bin\$(Configuration)\net8.0\Effector.dll'))</_EffectorRuntimeAotDllPath>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(PublishAot)' != 'true'">
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Effector\Effector.csproj" />
     <ProjectReference Include="..\Effector.Sample.Effects\Effector.Sample.Effects.csproj" />
     <PackageReference Include="Avalonia.Desktop" />
@@ -16,30 +14,6 @@
     <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="SkiaSharp.NativeAssets.macOS" />
   </ItemGroup>
-
-  <ItemGroup Condition="'$(PublishAot)' == 'true'">
-    <Reference Include="Effector">
-      <HintPath>$(_EffectorRuntimeAotDllPath)</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <ProjectReference Include="..\Effector.Sample.Effects\Effector.Sample.Effects.csproj" />
-    <PackageReference Include="Avalonia.Desktop" />
-    <PackageReference Include="Avalonia.Themes.Fluent" />
-    <PackageReference Include="Avalonia.Fonts.Inter" />
-    <PackageReference Include="SkiaSharp.NativeAssets.macOS" />
-  </ItemGroup>
-
-  <Target Name="Effector_BuildAotRuntimeReference"
-          BeforeTargets="ResolveReferences"
-          Condition="'$(PublishAot)' == 'true' and Exists('$(_EffectorRuntimeProjectPath)')">
-    <MSBuild Projects="$(_EffectorRuntimeProjectPath)"
-             Targets="Build"
-             BuildInParallel="false"
-             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun"
-             Properties="Configuration=$(Configuration);TargetFramework=net8.0;GeneratePackageOnBuild=false;DesignTimeBuild=false;BuildingProject=false" />
-    <Error Condition="!Exists('$(_EffectorRuntimeAotDllPath)')"
-           Text="[Effector.Build] AOT runtime reference was not found at '$(_EffectorRuntimeAotDllPath)'." />
-  </Target>
 
   <Import Project="..\..\src\Effector.Build\buildTransitive\Effector.Build.props" />
   <Import Project="..\..\src\Effector.Build\buildTransitive\Effector.Build.targets" />
