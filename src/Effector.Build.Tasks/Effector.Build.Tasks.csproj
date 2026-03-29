@@ -7,12 +7,25 @@
     <ImplicitUsings>false</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(EffectorUseBuiltRuntimeReference)' != 'true'">
+    <ProjectReference Include="..\Effector\Effector.csproj"
+                      AdditionalProperties="EffectorSkipCustomTargets=true;GeneratePackageOnBuild=false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EffectorUseBuiltRuntimeReference)' == 'true'">
+    <Reference Include="Effector">
+      <HintPath>..\Effector\bin\$(Configuration)\netstandard2.0\Effector.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\Effector\Effector.csproj" />
+    <PackageReference Include="Avalonia" />
     <PackageReference Include="Microsoft.Build.Framework" />
     <PackageReference Include="Microsoft.Build.Utilities.Core" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
     <PackageReference Include="Mono.Cecil" />
+    <PackageReference Include="SkiaSharp" />
     <PackageReference Include="System.Reflection.Metadata" />
   </ItemGroup>
 </Project>
