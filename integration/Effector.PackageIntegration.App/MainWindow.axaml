@@ -1,0 +1,268 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:effects="clr-namespace:Effector.PackageIntegration.Effects;assembly=Effector.PackageIntegration.Effects"
+        x:Class="Effector.PackageIntegration.App.MainWindow"
+        Width="920"
+        Height="620"
+        MinWidth="760"
+        MinHeight="520"
+        Title="Effector Package Integration"
+        FontFamily="avares://Avalonia.Fonts.Inter#Inter">
+  <Window.Background>
+    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+      <GradientStop Color="#FFF8FBFF" Offset="0" />
+      <GradientStop Color="#FFF4EDE3" Offset="0.55" />
+      <GradientStop Color="#FFF0F7FF" Offset="1" />
+    </LinearGradientBrush>
+  </Window.Background>
+
+  <Grid Margin="24"
+        RowDefinitions="Auto,Auto,*"
+        RowSpacing="20">
+    <StackPanel Spacing="10">
+      <TextBlock Text="Effector NuGet Package Integration"
+                 FontSize="32"
+                 FontWeight="SemiBold"
+                 Foreground="#1E2A2D" />
+      <TextBlock Text="This app restores Effector from a local NuGet feed, loads a custom effect from a separate package consumer project, and exercises the same Visual.Effect surface used by built-in Avalonia effects."
+                 TextWrapping="Wrap"
+                 Foreground="#56686E" />
+    </StackPanel>
+
+    <UniformGrid Grid.Row="1"
+                 Columns="3"
+                 Rows="1"
+                 Margin="0,4,0,0">
+      <Border Margin="0,0,14,0"
+              Padding="16"
+              CornerRadius="20"
+              Background="#FFF7FBF5"
+              BorderBrush="#22004D3C"
+              BorderThickness="1">
+        <StackPanel Spacing="4">
+          <TextBlock Text="NuGet"
+                     FontSize="24"
+                     FontWeight="Bold"
+                     Foreground="#27594C" />
+          <TextBlock Text="Restored from local feed"
+                     Foreground="#58706A" />
+        </StackPanel>
+      </Border>
+
+      <Border x:Name="CodeAssignedBadge"
+              Margin="0,0,14,0"
+              Padding="16"
+              CornerRadius="20"
+              Background="#FFFDF4EA"
+              BorderBrush="#22005A7E"
+              BorderThickness="1">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Code"
+                     FontSize="24"
+                     FontWeight="Bold"
+                     Foreground="#965E12" />
+          <TextBlock Text="Effect assigned in code-behind"
+                     Foreground="#7F6B4F" />
+        </StackPanel>
+      </Border>
+
+      <Border Padding="16"
+              CornerRadius="20"
+              Background="#FFF3F8FF"
+              BorderBrush="#22004579"
+              BorderThickness="1">
+        <StackPanel Spacing="4">
+          <TextBlock Text="AOT"
+                     FontSize="24"
+                     FontWeight="Bold"
+                     Foreground="#27546A" />
+          <TextBlock Text="Published in CI from the package"
+                     Foreground="#5B7181" />
+        </StackPanel>
+      </Border>
+    </UniformGrid>
+
+    <Grid Grid.Row="2"
+          ColumnDefinitions="*,*"
+          ColumnSpacing="20">
+      <Border x:Name="BeforeHost"
+              Padding="18"
+              CornerRadius="24"
+              Background="#FAFFFFFF"
+              BorderBrush="#22003845"
+              BorderThickness="1">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Before"
+                     FontSize="18"
+                     FontWeight="SemiBold"
+                     Foreground="#1E2A2D" />
+          <Grid Height="320"
+                ColumnDefinitions="1.8*,1*"
+                ColumnSpacing="14">
+            <Border CornerRadius="18">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                  <GradientStop Color="#FFFA7A28" Offset="0" />
+                  <GradientStop Color="#FFEE4D6D" Offset="0.55" />
+                  <GradientStop Color="#FF7B2CBF" Offset="1" />
+                </LinearGradientBrush>
+              </Border.Background>
+              <Canvas>
+                <Border Canvas.Left="16"
+                        Canvas.Top="18"
+                        Width="110"
+                        Height="42"
+                        CornerRadius="16"
+                        Background="#33000000" />
+                <Border Canvas.Left="28"
+                        Canvas.Top="88"
+                        Width="156"
+                        Height="88"
+                        CornerRadius="18"
+                        Background="#30FFFFFF" />
+                <Border Canvas.Left="168"
+                        Canvas.Top="204"
+                        Width="104"
+                        Height="50"
+                        CornerRadius="14"
+                        Background="#55FFF4D8" />
+              </Canvas>
+            </Border>
+
+            <StackPanel Grid.Column="1"
+                        Spacing="12">
+              <Border Padding="16"
+                      CornerRadius="18"
+                      Background="#FFF7FAFD">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="Package consumer"
+                             FontSize="24"
+                             FontWeight="SemiBold"
+                             Foreground="#203033" />
+                  <TextBlock Text="The preview content stays normal Avalonia XAML. Only the effect comes from the packaged Effector consumer project."
+                             TextWrapping="Wrap"
+                             Foreground="#5A6B72" />
+                </StackPanel>
+              </Border>
+
+              <WrapPanel Orientation="Horizontal"
+                         ItemWidth="88"
+                         ItemHeight="28">
+                <Border Margin="0,0,8,8"
+                        Padding="12,4"
+                        CornerRadius="999"
+                        Background="#1400667A">
+                  <TextBlock Text="restore" Foreground="#00667A" />
+                </Border>
+                <Border Margin="0,0,8,8"
+                        Padding="12,4"
+                        CornerRadius="999"
+                        Background="#14A86417">
+                  <TextBlock Text="weave" Foreground="#A86417" />
+                </Border>
+                <Border Margin="0,0,8,8"
+                        Padding="12,4"
+                        CornerRadius="999"
+                        Background="#142A6AFF">
+                  <TextBlock Text="patch" Foreground="#2A6AFF" />
+                </Border>
+              </WrapPanel>
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border x:Name="AfterHost"
+              Grid.Column="1"
+              Padding="18"
+              CornerRadius="24"
+              Background="#FAFFFFFF"
+              BorderBrush="#22003845"
+              BorderThickness="1">
+        <Border.Effect>
+          <effects:PackageTintEffect TintColor="#00C2FF"
+                                     Strength="0.62" />
+        </Border.Effect>
+        <StackPanel Spacing="14">
+          <TextBlock Text="After"
+                     FontSize="18"
+                     FontWeight="SemiBold"
+                     Foreground="#1E2A2D" />
+          <Grid Height="320"
+                ColumnDefinitions="1.8*,1*"
+                ColumnSpacing="14">
+            <Border CornerRadius="18">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                  <GradientStop Color="#FFFA7A28" Offset="0" />
+                  <GradientStop Color="#FFEE4D6D" Offset="0.55" />
+                  <GradientStop Color="#FF7B2CBF" Offset="1" />
+                </LinearGradientBrush>
+              </Border.Background>
+              <Canvas>
+                <Border Canvas.Left="16"
+                        Canvas.Top="18"
+                        Width="110"
+                        Height="42"
+                        CornerRadius="16"
+                        Background="#33000000" />
+                <Border Canvas.Left="28"
+                        Canvas.Top="88"
+                        Width="156"
+                        Height="88"
+                        CornerRadius="18"
+                        Background="#30FFFFFF" />
+                <Border Canvas.Left="168"
+                        Canvas.Top="204"
+                        Width="104"
+                        Height="50"
+                        CornerRadius="14"
+                        Background="#55FFF4D8" />
+              </Canvas>
+            </Border>
+
+            <StackPanel Grid.Column="1"
+                        Spacing="12">
+              <Border Padding="16"
+                      CornerRadius="18"
+                      Background="#FFF7FAFD">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="Packaged effect"
+                             FontSize="24"
+                             FontWeight="SemiBold"
+                             Foreground="#203033" />
+                  <TextBlock Text="This panel is tinted through a custom effect restored from the generated NuGet package, not from a source project reference."
+                             TextWrapping="Wrap"
+                             Foreground="#5A6B72" />
+                </StackPanel>
+              </Border>
+
+              <WrapPanel Orientation="Horizontal"
+                         ItemWidth="88"
+                         ItemHeight="28">
+                <Border Margin="0,0,8,8"
+                        Padding="12,4"
+                        CornerRadius="999"
+                        Background="#1400667A">
+                  <TextBlock Text="nuget" Foreground="#00667A" />
+                </Border>
+                <Border Margin="0,0,8,8"
+                        Padding="12,4"
+                        CornerRadius="999"
+                        Background="#14A86417">
+                  <TextBlock Text="consumer" Foreground="#A86417" />
+                </Border>
+                <Border Margin="0,0,8,8"
+                        Padding="12,4"
+                        CornerRadius="999"
+                        Background="#142A6AFF">
+                  <TextBlock Text="effect" Foreground="#2A6AFF" />
+                </Border>
+              </WrapPanel>
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>
