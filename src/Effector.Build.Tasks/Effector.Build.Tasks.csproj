@@ -11,6 +11,7 @@
     <ProjectReference Include="..\Effector\Effector.csproj" />
     <PackageReference Include="Microsoft.Build.Framework" />
     <PackageReference Include="Microsoft.Build.Utilities.Core" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
     <PackageReference Include="Mono.Cecil" />
     <PackageReference Include="System.Reflection.Metadata" />
   </ItemGroup>

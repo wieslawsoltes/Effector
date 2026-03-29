@@ -8,14 +8,28 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' != ''">true</ContinuousIntegrationBuild>
     <Company>Wieslaw Soltes</Company>
     <Authors>Wieslaw Soltes</Authors>
+    <Copyright>Copyright (c) Wieslaw Soltes</Copyright>
     <Product>Effector</Product>
+    <Title>Effector</Title>
+    <Description>Extensible Skia-backed custom effects for Avalonia 11.3.12 with metadata-based weaving, patched Avalonia render hooks, runtime shader support, and NativeAOT-aware packaging.</Description>
     <RepositoryUrl>https://github.com/wieslawsoltes/Effector</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/wieslawsoltes/Effector</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>avalonia;skia;skiasharp;effects;shader;nativeaot;msbuild;weaving</PackageTags>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>See the README and GitHub Releases for usage guidance, supported Avalonia versions, AOT notes, and release-specific changes.</PackageReleaseNotes>
+    <IncludeSymbols Condition="'$(IsPackable)' == 'true'">true</IncludeSymbols>
+    <SymbolPackageFormat Condition="'$(IsPackable)' == 'true'">snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PackageOutputPath Condition="'$(PackageOutputPath)' == '' and '$(IsPackable)' == 'true'">$([System.IO.Path]::Combine('$(MSBuildThisFileDirectory)', 'artifacts', 'packages'))</PackageOutputPath>
+    <RepositoryBranch Condition="'$(RepositoryBranch)' == '' and '$(GITHUB_REF_NAME)' != ''">$(GITHUB_REF_NAME)</RepositoryBranch>
+    <RepositoryCommit Condition="'$(RepositoryCommit)' == '' and '$(GITHUB_SHA)' != ''">$(GITHUB_SHA)</RepositoryCommit>
     <VersionPrefix>0.1.0</VersionPrefix>
     <EffectorVersion>0.1.0</EffectorVersion>
     <AvaloniaVersion>11.3.12</AvaloniaVersion>
