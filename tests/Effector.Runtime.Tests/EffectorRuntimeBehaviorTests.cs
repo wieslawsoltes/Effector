@@ -50,6 +50,13 @@ public sealed class EffectorRuntimeBehaviorTests
 
     private static readonly HeadlessUnitTestSession Session = HeadlessUnitTestSession.StartNew(typeof(EffectorHeadlessTestAppBuilder));
 
+    private sealed class TestDisposable : IDisposable
+    {
+        public void Dispose()
+        {
+        }
+    }
+
     private static void RunOnUiThread(Action action)
     {
         Session.Dispatch(action, CancellationToken.None).GetAwaiter().GetResult();
@@ -320,6 +327,57 @@ public sealed class EffectorRuntimeBehaviorTests
         Assert.True(shaderEffect.LocalMatrix.HasValue);
         Assert.Equal(-40f, shaderEffect.LocalMatrix!.Value.TransX);
         Assert.Equal(-12f, shaderEffect.LocalMatrix!.Value.TransY);
+    }
+
+    [Fact]
+    public void ShaderCaptureTransform_Is_Applied_Immediately_On_Begin()
+    {
+        using var previousSurface = SKSurface.Create(new SKImageInfo(256, 128));
+        using var captureSurface = SKSurface.Create(new SKImageInfo(96, 64));
+        Assert.NotNull(previousSurface);
+        Assert.NotNull(captureSurface);
+
+        var frame = new EffectorShaderEffectFrame(
+            new ScanlineShaderEffect(),
+            previousSurface!.Canvas,
+            previousSurface,
+            captureSurface!,
+            new TestDisposable(),
+            layerDrawingContext: null,
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            new SKRectI(0, 0, 256, 128),
+            new SKRect(40f, 12f, 88f, 52f),
+            new SKRect(40f, 12f, 88f, 52f),
+            new SKRect(0f, 0f, 48f, 40f),
+            new SKRectI(40, 12, 88, 52),
+            rawEffectRect: new SKRect(40f, 12f, 88f, 52f),
+            new SKMatrix
+            {
+                ScaleX = 1f,
+                SkewX = 0f,
+                TransX = 84f,
+                SkewY = 0f,
+                ScaleY = 1f,
+                TransY = 52f,
+                Persp0 = 0f,
+                Persp1 = 0f,
+                Persp2 = 1f
+            },
+            usedRenderThreadBounds: false,
+            usesLocalDrawingCoordinates: true,
+            proxy: null,
+            previousProxyImpl: null);
+
+        var applyTransform = typeof(EffectorRuntime).GetMethod(
+            "ApplyInitialShaderCaptureTransform",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        applyTransform.Invoke(null, new object[] { frame });
+
+        var matrix = captureSurface.Canvas.TotalMatrix;
+        Assert.Equal(44f, matrix.TransX);
+        Assert.Equal(40f, matrix.TransY);
+        Assert.Equal(1f, matrix.ScaleX);
+        Assert.Equal(1f, matrix.ScaleY);
     }
 
     [Fact]
