@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 using Avalonia.Media;
@@ -113,42 +115,41 @@ public sealed class EffectorBuildTargetsTests
 
     private static string GetBuildTargetsPath([CallerFilePath] string sourceFilePath = "")
     {
-        var testProjectDirectory = Path.GetDirectoryName(sourceFilePath);
-        Assert.False(string.IsNullOrWhiteSpace(testProjectDirectory));
-
-        return Path.GetFullPath(Path.Combine(
-            testProjectDirectory!,
-            "..",
-            "..",
-            "src",
-            "Effector.Build",
-            "buildTransitive",
-            "Effector.Build.targets"));
+        return ResolveRepositoryFile(
+            new[]
+            {
+                "src",
+                "Effector.Build",
+                "buildTransitive",
+                "Effector.Build.targets"
+            },
+            sourceFilePath);
     }
 
     private static string GetBuiltTaskAssemblyPath([CallerFilePath] string sourceFilePath = "")
     {
-        var testProjectDirectory = Path.GetDirectoryName(sourceFilePath);
-        Assert.False(string.IsNullOrWhiteSpace(testProjectDirectory));
-
         var configuration =
             AppContext.BaseDirectory.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                 ? "Release"
                 : "Debug";
 
-        var taskAssemblyPath = Path.GetFullPath(Path.Combine(
-            testProjectDirectory!,
-            "..",
-            "..",
-            "src",
-            "Effector.Build.Tasks",
-            "bin",
-            configuration,
-            "netstandard2.0",
-            "Effector.Build.Tasks.dll"));
+        var copiedTaskAssemblyPath = Path.Combine(AppContext.BaseDirectory, "Effector.Build.Tasks.dll");
+        if (File.Exists(copiedTaskAssemblyPath))
+        {
+            return copiedTaskAssemblyPath;
+        }
 
-        Assert.True(File.Exists(taskAssemblyPath), $"Expected built task assembly at '{taskAssemblyPath}'.");
-        return taskAssemblyPath;
+        return ResolveRepositoryFile(
+            new[]
+            {
+                "src",
+                "Effector.Build.Tasks",
+                "bin",
+                configuration,
+                "netstandard2.0",
+                "Effector.Build.Tasks.dll"
+            },
+            sourceFilePath);
     }
 
     private static string GetAvaloniaBasePath() =>
@@ -161,6 +162,55 @@ public sealed class EffectorBuildTargetsTests
         path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
             ? path
             : path + Path.DirectorySeparatorChar;
+
+    private static string ResolveRepositoryFile(string[] relativePathSegments, string sourceFilePath)
+    {
+        var relativePath = Path.Combine(relativePathSegments);
+        var attemptedPaths = new List<string>();
+
+        foreach (var repositoryRoot in GetRepositoryRootCandidates(sourceFilePath))
+        {
+            var candidatePath = Path.GetFullPath(Path.Combine(repositoryRoot, relativePath));
+            attemptedPaths.Add(candidatePath);
+
+            if (File.Exists(candidatePath))
+            {
+                return candidatePath;
+            }
+        }
+
+        Assert.Fail(
+            $"Expected file '{relativePath}'. Checked:{Environment.NewLine}{string.Join(Environment.NewLine, attemptedPaths.Distinct(StringComparer.OrdinalIgnoreCase))}");
+        return string.Empty;
+    }
+
+    private static IEnumerable<string> GetRepositoryRootCandidates(string sourceFilePath)
+    {
+        if (!string.IsNullOrWhiteSpace(Directory.GetCurrentDirectory()))
+        {
+            yield return Directory.GetCurrentDirectory();
+        }
+
+        var githubWorkspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+        if (!string.IsNullOrWhiteSpace(githubWorkspace))
+        {
+            yield return githubWorkspace!;
+        }
+
+        yield return Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            ".."));
+
+        var testProjectDirectory = Path.GetDirectoryName(sourceFilePath);
+        if (!string.IsNullOrWhiteSpace(testProjectDirectory))
+        {
+            yield return Path.GetFullPath(Path.Combine(testProjectDirectory!, "..", ".."));
+        }
+    }
 
     private readonly record struct ProcessResult(int ExitCode, string Output);
 }
