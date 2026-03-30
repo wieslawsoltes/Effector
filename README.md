@@ -251,6 +251,7 @@ The NuGet package ships `buildTransitive` targets. On consuming projects Effecto
 
 - weaves the compiled consumer assembly after `CoreCompile`
 - patches app-local `Avalonia.Base.dll` and `Avalonia.Skia.dll` after build output copy
+- patches Android ABI asset copies after `_PrepareAssemblies` so packaged APKs use the patched Avalonia binaries
 - patches publish output
 - patches the NativeAOT ILC input assemblies before native compilation
 

@@ -87,6 +87,8 @@ The runtime shader path is deliberately scoped to procedural overlays in v1. Dur
 - targets execute:
   - `AfterTargets="CoreCompile"`
   - `AfterTargets="CopyFilesToOutputDirectory"` for `Avalonia.Base.dll` / `Avalonia.Skia.dll` in `$(TargetDir)`
+  - `AfterTargets="_PrepareAssemblies"` / `BeforeTargets="_BuildApkEmbed"` for Android ABI asset copies in `$(IntermediateOutputPath)android/assets/*/`
+  - `AfterTargets="ComputeIlcCompileInputs"` / `BeforeTargets="WriteIlcRspFileForCompilation"` for NativeAOT `@(IlcReference)` inputs
   - `AfterTargets="Publish"` for `Avalonia.Base.dll` / `Avalonia.Skia.dll` in `$(PublishDir)`
 
 ### Metadata-First Migration Plan
