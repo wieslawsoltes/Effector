@@ -163,6 +163,125 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void HostBounds_Update_When_RenderTransform_Mutates_InPlace()
+    {
+        RunOnUiThread(() =>
+        {
+            var effect = new GridShaderEffect
+            {
+                CellSize = 16d,
+                Strength = 0.4d,
+                Color = Color.Parse("#00D9FF")
+            };
+
+            var scale = new ScaleTransform(1d, 1d);
+            var host = new Border
+            {
+                Width = 120,
+                Height = 80,
+                Effect = effect,
+                RenderTransform = scale,
+                RenderTransformOrigin = RelativePoint.Center
+            };
+
+            var canvas = new Canvas
+            {
+                Width = 320,
+                Height = 220,
+                Children = { host }
+            };
+
+            var window = new Window
+            {
+                Width = 320,
+                Height = 220,
+                Content = canvas
+            };
+
+            Canvas.SetLeft(host, 48d);
+            Canvas.SetTop(host, 36d);
+            window.Show();
+            window.UpdateLayout();
+
+            var initialBounds = GetStoredHostBounds(effect);
+
+            scale.ScaleX = 1.4d;
+            scale.ScaleY = 1.25d;
+
+            var updatedBounds = GetStoredHostBounds(effect);
+            var expectedBounds = GetVisualBoundsRelativeTo(host, window);
+
+            Assert.True(updatedBounds.Width > initialBounds.Width + 20d);
+            Assert.True(updatedBounds.Height > initialBounds.Height + 10d);
+            Assert.True(Math.Abs(updatedBounds.X - expectedBounds.X) <= 2d);
+            Assert.True(Math.Abs(updatedBounds.Y - expectedBounds.Y) <= 2d);
+            Assert.True(Math.Abs(updatedBounds.Width - expectedBounds.Width) <= 2d);
+            Assert.True(Math.Abs(updatedBounds.Height - expectedBounds.Height) <= 2d);
+        });
+    }
+
+    [Fact]
+    public async Task HostTransformPreference_Is_RenderThreadSafe_After_TransformMutation()
+    {
+        var effect = RunOnUiThread(() =>
+        {
+            var instance = new GridShaderEffect
+            {
+                CellSize = 16d,
+                Strength = 0.4d,
+                Color = Color.Parse("#00D9FF")
+            };
+
+            var scale = new ScaleTransform(1d, 1d);
+            var host = new Border
+            {
+                Width = 120,
+                Height = 80,
+                Effect = instance,
+                RenderTransform = scale,
+                RenderTransformOrigin = RelativePoint.Center
+            };
+
+            var canvas = new Canvas
+            {
+                Width = 320,
+                Height = 220,
+                Children = { host }
+            };
+
+            var window = new Window
+            {
+                Width = 320,
+                Height = 220,
+                Content = canvas
+            };
+
+            Canvas.SetLeft(host, 48d);
+            Canvas.SetTop(host, 36d);
+            window.Show();
+            window.UpdateLayout();
+
+            scale.ScaleX = 1.4d;
+            scale.ScaleY = 1.25d;
+            return instance;
+        });
+
+        var result = await Task.Run(() =>
+        {
+            var shouldPreferHostBounds = typeof(EffectorRuntime).GetMethod(
+                "ShouldPreferHostBounds",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var args = new object?[] { effect, null };
+            var shouldPrefer = (bool)shouldPreferHostBounds.Invoke(null, args)!;
+            return (shouldPrefer, size: Assert.IsType<Size>(args[1]));
+        });
+
+        Assert.True(result.shouldPrefer);
+        Assert.Equal(120d, result.size.Width, 3);
+        Assert.Equal(80d, result.size.Height, 3);
+    }
+
+    [Fact]
     public void GetEffectOutputPadding_UsesCustomFactory_ForGlowEffect()
     {
         RunOnUiThread(() =>
@@ -428,6 +547,51 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void ShaderBoundsSelection_Prefers_TransformedHostBounds_Over_ClipRect()
+    {
+        var selectMethod = typeof(EffectorRuntime).GetMethod(
+            "SelectAuthoritativeEffectRectForHostPreference",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var staleClipRect = new Rect(48d, 36d, 120d, 80d);
+        var transformedHostBounds = new Rect(24d, 26d, 168d, 100d);
+
+        var selected = (Rect?)selectMethod.Invoke(null, new object?[] { staleClipRect, transformedHostBounds, null, true, new Size(120d, 80d) });
+
+        Assert.Equal(transformedHostBounds, selected);
+    }
+
+    [Fact]
+    public void ShaderBoundsSelection_Clips_TransformedHostBounds_When_ClipRect_Is_Materially_Smaller()
+    {
+        var selectMethod = typeof(EffectorRuntime).GetMethod(
+            "SelectAuthoritativeEffectRectForHostPreference",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var viewportClipRect = new Rect(48d, 36d, 72d, 44d);
+        var transformedHostBounds = new Rect(24d, 26d, 168d, 100d);
+
+        var selected = (Rect?)selectMethod.Invoke(null, new object?[] { viewportClipRect, transformedHostBounds, null, true, new Size(120d, 80d) });
+
+        Assert.Equal(transformedHostBounds.Intersect(viewportClipRect), selected);
+    }
+
+    [Fact]
+    public void ShaderBoundsSelection_Clips_TransformedHostBounds_When_ClipRect_Is_Smaller_Than_TransformedHost_But_Larger_Than_UnclippedSize()
+    {
+        var selectMethod = typeof(EffectorRuntime).GetMethod(
+            "SelectAuthoritativeEffectRectForHostPreference",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var partiallyVisibleClipRect = new Rect(33d, 26d, 150d, 100d);
+        var transformedHostBounds = new Rect(24d, 26d, 168d, 100d);
+
+        var selected = (Rect?)selectMethod.Invoke(null, new object?[] { partiallyVisibleClipRect, transformedHostBounds, null, true, new Size(120d, 80d) });
+
+        Assert.Equal(transformedHostBounds.Intersect(partiallyVisibleClipRect), selected);
+    }
+
+    [Fact]
     public void ShaderIntermediateSurfaceBounds_Are_Derived_From_EffectBounds_Not_DeviceClip()
     {
         var resolveMethod = typeof(EffectorRuntime).GetMethod(
@@ -595,6 +759,51 @@ public sealed class EffectorRuntimeBehaviorTests
                 Assert.NotNull(shaderEffect.FallbackRenderer);
             }
         });
+    }
+
+    [Fact]
+    public void GridShaderEffect_RuntimeShader_Composites_Like_Fallback()
+    {
+        if (!EffectorRuntime.DirectRuntimeShadersEnabled)
+        {
+            return;
+        }
+
+        using var snapshotSurface = SKSurface.Create(new SKImageInfo(96, 96));
+        Assert.NotNull(snapshotSurface);
+        snapshotSurface!.Canvas.Clear(new SKColor(0xFF, 0x70, 0x43, 0xFF));
+        snapshotSurface.Canvas.Flush();
+
+        using var snapshot = snapshotSurface.Snapshot();
+        var context = new SkiaShaderEffectContext(
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            snapshot,
+            new SKRect(0, 0, 96, 96),
+            new SKRect(0, 0, 96, 96));
+
+        using var shaderEffect = new GridShaderEffectFactory().CreateShaderEffect(
+            new object[] { 12d, 0.8d, Color.Parse("#00D9FF") },
+            context);
+
+        Assert.NotNull(shaderEffect);
+        Assert.NotNull(shaderEffect!.Shader);
+        Assert.NotNull(shaderEffect.FallbackRenderer);
+
+        using var runtime = RenderShaderEffectComposite(snapshot, shaderEffect, useRuntimeShader: true);
+        using var fallback = RenderShaderEffectComposite(snapshot, shaderEffect, useRuntimeShader: false);
+
+        AssertColorClose(runtime.GetPixel(18, 18), fallback.GetPixel(18, 18), tolerance: 4);
+        AssertColorClose(runtime.GetPixel(12, 18), fallback.GetPixel(12, 18), tolerance: 8);
+        AssertColorClose(runtime.GetPixel(18, 12), fallback.GetPixel(18, 12), tolerance: 8);
+    }
+
+    [Fact]
+    public void OverlayOnlySampleShaders_Premultiply_RuntimeShaderOutput()
+    {
+        AssertShaderPremultipliesColorOutput(typeof(GridShaderEffectFactory));
+        AssertShaderPremultipliesColorOutput(typeof(SpotlightShaderEffectFactory));
+        AssertShaderPremultipliesColorOutput(typeof(PointerSpotlightShaderEffectFactory));
+        AssertShaderPremultipliesColorOutput(typeof(ReactiveGridShaderEffectFactory));
     }
 
     [Fact]
@@ -2060,11 +2269,122 @@ public sealed class EffectorRuntimeBehaviorTests
         return bitmap;
     }
 
+    private static SKBitmap RenderShaderEffectComposite(SKImage snapshot, SkiaShaderEffect shaderEffect, bool useRuntimeShader)
+    {
+        var width = snapshot.Width;
+        var height = snapshot.Height;
+        var bitmap = new SKBitmap(width, height);
+
+        using var surface = SKSurface.Create(new SKImageInfo(width, height));
+        Assert.NotNull(surface);
+
+        var canvas = surface!.Canvas;
+        canvas.Clear(SKColors.White);
+        canvas.DrawImage(snapshot, 0, 0);
+
+        var destinationRect = shaderEffect.DestinationRect ?? SKRect.Create(width, height);
+        var restoreCount = canvas.Save();
+        try
+        {
+            canvas.ClipRect(destinationRect);
+
+            using var layerPaint = new SKPaint
+            {
+                BlendMode = shaderEffect.BlendMode,
+                IsAntialias = shaderEffect.IsAntialias
+            };
+            var layerRestoreCount = canvas.SaveLayer(destinationRect, layerPaint);
+            try
+            {
+                if (useRuntimeShader)
+                {
+                    Assert.NotNull(shaderEffect.Shader);
+                    using var paint = new SKPaint
+                    {
+                        Shader = shaderEffect.Shader,
+                        BlendMode = SKBlendMode.SrcOver,
+                        IsAntialias = shaderEffect.IsAntialias
+                    };
+                    canvas.DrawRect(destinationRect, paint);
+                }
+                else
+                {
+                    shaderEffect.RenderFallback(canvas, snapshot);
+                }
+
+                using var maskPaint = new SKPaint { BlendMode = SKBlendMode.DstIn };
+                canvas.DrawImage(snapshot, 0, 0, maskPaint);
+            }
+            finally
+            {
+                canvas.RestoreToCount(layerRestoreCount);
+            }
+        }
+        finally
+        {
+            canvas.RestoreToCount(restoreCount);
+        }
+
+        canvas.Flush();
+        using var image = surface.Snapshot();
+        image.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0);
+        return bitmap;
+    }
+
+    private static void AssertColorClose(SKColor actual, SKColor expected, int tolerance)
+    {
+        Assert.True(Math.Abs(actual.Red - expected.Red) <= tolerance, $"Red mismatch: actual={actual.Red}, expected={expected.Red}, tolerance={tolerance}.");
+        Assert.True(Math.Abs(actual.Green - expected.Green) <= tolerance, $"Green mismatch: actual={actual.Green}, expected={expected.Green}, tolerance={tolerance}.");
+        Assert.True(Math.Abs(actual.Blue - expected.Blue) <= tolerance, $"Blue mismatch: actual={actual.Blue}, expected={expected.Blue}, tolerance={tolerance}.");
+        Assert.True(Math.Abs(actual.Alpha - expected.Alpha) <= tolerance, $"Alpha mismatch: actual={actual.Alpha}, expected={expected.Alpha}, tolerance={tolerance}.");
+    }
+
+    private static void AssertShaderPremultipliesColorOutput(Type factoryType)
+    {
+        var shaderSourceField = factoryType.GetField("ShaderSource", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(shaderSourceField);
+
+        var shaderSource = Assert.IsType<string>(shaderSourceField!.GetRawConstantValue());
+        Assert.Contains("premulAlpha", shaderSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("return half4(red, green, blue, alpha);", shaderSource, StringComparison.Ordinal);
+    }
+
     private static T ReadProperty<T>(object instance, string propertyName)
     {
         var property = instance.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         Assert.NotNull(property);
         return (T)property!.GetValue(instance)!;
+    }
+
+    private static Rect GetStoredHostBounds(IEffect effect)
+    {
+        var tryGetBoundsMethod = typeof(EffectorRuntime).GetMethod(
+            "TryGetHostVisualBounds",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        var args = new object?[] { effect, null };
+        var success = (bool)tryGetBoundsMethod.Invoke(null, args)!;
+
+        Assert.True(success);
+        return Assert.IsType<Rect>(args[1]);
+    }
+
+    private static Rect GetVisualBoundsRelativeTo(Visual visual, Visual root)
+    {
+        var topLeft = visual.TranslatePoint(new Point(0d, 0d), root);
+        var topRight = visual.TranslatePoint(new Point(visual.Bounds.Width, 0d), root);
+        var bottomLeft = visual.TranslatePoint(new Point(0d, visual.Bounds.Height), root);
+        var bottomRight = visual.TranslatePoint(new Point(visual.Bounds.Width, visual.Bounds.Height), root);
+
+        Assert.True(topLeft.HasValue);
+        Assert.True(topRight.HasValue);
+        Assert.True(bottomLeft.HasValue);
+        Assert.True(bottomRight.HasValue);
+
+        var minX = Math.Min(Math.Min(topLeft!.Value.X, topRight!.Value.X), Math.Min(bottomLeft!.Value.X, bottomRight!.Value.X));
+        var minY = Math.Min(Math.Min(topLeft.Value.Y, topRight.Value.Y), Math.Min(bottomLeft.Value.Y, bottomRight.Value.Y));
+        var maxX = Math.Max(Math.Max(topLeft.Value.X, topRight.Value.X), Math.Max(bottomLeft.Value.X, bottomRight.Value.X));
+        var maxY = Math.Max(Math.Max(topLeft.Value.Y, topRight.Value.Y), Math.Max(bottomLeft.Value.Y, bottomRight.Value.Y));
+        return new Rect(minX, minY, Math.Max(0d, maxX - minX), Math.Max(0d, maxY - minY));
     }
 
     private static string GetScreenshotPath(string fileName)

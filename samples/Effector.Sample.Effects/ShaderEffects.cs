@@ -153,7 +153,8 @@ public sealed class GridShaderEffectFactory :
             float gx = fract(coord.x / span);
             float gy = fract(coord.y / span);
             float alpha = (gx < 0.06 || gy < 0.06) ? strength : 0.0;
-            return half4(red, green, blue, alpha);
+            half premulAlpha = half(alpha);
+            return half4(red * premulAlpha, green * premulAlpha, blue * premulAlpha, premulAlpha);
         }
         """;
 
@@ -293,7 +294,8 @@ public sealed class SpotlightShaderEffectFactory :
             float dist = sqrt((dx * dx) + (dy * dy));
             float fade = dist >= radius ? 0.0 : 1.0 - (dist / max(radius, 0.001));
             float alpha = fade * strength;
-            return half4(red, green, blue, alpha);
+            half premulAlpha = half(alpha);
+            return half4(red * premulAlpha, green * premulAlpha, blue * premulAlpha, premulAlpha);
         }
         """;
 
