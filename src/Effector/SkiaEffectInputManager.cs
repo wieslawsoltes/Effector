@@ -72,7 +72,9 @@ internal static class SkiaEffectInputManager
         private readonly SkiaEffectHostContext _context;
         private readonly IDisposable _boundsSubscription;
         private readonly IDisposable _renderTransformSubscription;
+        private readonly IDisposable _renderTransformOriginSubscription;
         private readonly Layoutable? _layoutable;
+        private Transform? _observedRenderTransform;
         private bool _disposed;
 
         public SkiaEffectInputAttachment(Visual visual, SkiaEffectBase effect, ISkiaInputEffectHandler? handler)
@@ -84,8 +86,11 @@ internal static class SkiaEffectInputManager
             _boundsSubscription = visual.GetObservable(Visual.BoundsProperty)
                 .Subscribe(new AnonymousObserver<Rect>(_ => OnBoundsChanged()));
             _renderTransformSubscription = visual.GetObservable(Visual.RenderTransformProperty)
-                .Subscribe(new AnonymousObserver<ITransform?>(_ => OnBoundsChanged()));
+                .Subscribe(new AnonymousObserver<ITransform?>(OnRenderTransformChanged));
+            _renderTransformOriginSubscription = visual.GetObservable(Visual.RenderTransformOriginProperty)
+                .Subscribe(new AnonymousObserver<RelativePoint>(_ => OnBoundsChanged()));
             _layoutable = visual as Layoutable;
+            AttachRenderTransformObserver(visual.RenderTransform);
             if (_layoutable is not null)
             {
                 _layoutable.LayoutUpdated += LayoutUpdated;
@@ -120,6 +125,8 @@ internal static class SkiaEffectInputManager
             _disposed = true;
             _boundsSubscription.Dispose();
             _renderTransformSubscription.Dispose();
+            _renderTransformOriginSubscription.Dispose();
+            DetachRenderTransformObserver();
             if (_layoutable is not null)
             {
                 _layoutable.LayoutUpdated -= LayoutUpdated;
@@ -197,6 +204,17 @@ internal static class SkiaEffectInputManager
             }
         }
 
+        private void OnRenderTransformChanged(ITransform? transform)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            AttachRenderTransformObserver(transform);
+            OnBoundsChanged();
+        }
+
         private void OnBoundsChanged()
         {
             if (_disposed)
@@ -211,5 +229,34 @@ internal static class SkiaEffectInputManager
         private void LayoutUpdated(object? sender, EventArgs e) => OnBoundsChanged();
 
         private void EffectiveViewportChanged(object? sender, EffectiveViewportChangedEventArgs e) => OnBoundsChanged();
+
+        private void AttachRenderTransformObserver(ITransform? transform)
+        {
+            var observedTransform = transform as Transform;
+            if (ReferenceEquals(_observedRenderTransform, observedTransform))
+            {
+                return;
+            }
+
+            DetachRenderTransformObserver();
+            _observedRenderTransform = observedTransform;
+            if (_observedRenderTransform is not null)
+            {
+                _observedRenderTransform.Changed += RenderTransformChanged;
+            }
+        }
+
+        private void DetachRenderTransformObserver()
+        {
+            if (_observedRenderTransform is null)
+            {
+                return;
+            }
+
+            _observedRenderTransform.Changed -= RenderTransformChanged;
+            _observedRenderTransform = null;
+        }
+
+        private void RenderTransformChanged(object? sender, EventArgs e) => OnBoundsChanged();
     }
 }
