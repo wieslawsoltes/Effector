@@ -762,6 +762,51 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void GridShaderEffect_RuntimeShader_Composites_Like_Fallback()
+    {
+        if (!EffectorRuntime.DirectRuntimeShadersEnabled)
+        {
+            return;
+        }
+
+        using var snapshotSurface = SKSurface.Create(new SKImageInfo(96, 96));
+        Assert.NotNull(snapshotSurface);
+        snapshotSurface!.Canvas.Clear(new SKColor(0xFF, 0x70, 0x43, 0xFF));
+        snapshotSurface.Canvas.Flush();
+
+        using var snapshot = snapshotSurface.Snapshot();
+        var context = new SkiaShaderEffectContext(
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            snapshot,
+            new SKRect(0, 0, 96, 96),
+            new SKRect(0, 0, 96, 96));
+
+        using var shaderEffect = new GridShaderEffectFactory().CreateShaderEffect(
+            new object[] { 12d, 0.8d, Color.Parse("#00D9FF") },
+            context);
+
+        Assert.NotNull(shaderEffect);
+        Assert.NotNull(shaderEffect!.Shader);
+        Assert.NotNull(shaderEffect.FallbackRenderer);
+
+        using var runtime = RenderShaderEffectComposite(snapshot, shaderEffect, useRuntimeShader: true);
+        using var fallback = RenderShaderEffectComposite(snapshot, shaderEffect, useRuntimeShader: false);
+
+        AssertColorClose(runtime.GetPixel(18, 18), fallback.GetPixel(18, 18), tolerance: 4);
+        AssertColorClose(runtime.GetPixel(12, 18), fallback.GetPixel(12, 18), tolerance: 8);
+        AssertColorClose(runtime.GetPixel(18, 12), fallback.GetPixel(18, 12), tolerance: 8);
+    }
+
+    [Fact]
+    public void OverlayOnlySampleShaders_Premultiply_RuntimeShaderOutput()
+    {
+        AssertShaderPremultipliesColorOutput(typeof(GridShaderEffectFactory));
+        AssertShaderPremultipliesColorOutput(typeof(SpotlightShaderEffectFactory));
+        AssertShaderPremultipliesColorOutput(typeof(PointerSpotlightShaderEffectFactory));
+        AssertShaderPremultipliesColorOutput(typeof(ReactiveGridShaderEffectFactory));
+    }
+
+    [Fact]
     public void DirectRuntimeShaderPath_IsEnabledByDefault_On_Supported_SkiaSharp()
     {
         var skiaVersion = typeof(SKRuntimeEffect).Assembly.GetName().Version;
@@ -2222,6 +2267,86 @@ public sealed class EffectorRuntimeBehaviorTests
         using var filteredImage = surface.Snapshot();
         filteredImage.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0);
         return bitmap;
+    }
+
+    private static SKBitmap RenderShaderEffectComposite(SKImage snapshot, SkiaShaderEffect shaderEffect, bool useRuntimeShader)
+    {
+        var width = snapshot.Width;
+        var height = snapshot.Height;
+        var bitmap = new SKBitmap(width, height);
+
+        using var surface = SKSurface.Create(new SKImageInfo(width, height));
+        Assert.NotNull(surface);
+
+        var canvas = surface!.Canvas;
+        canvas.Clear(SKColors.White);
+        canvas.DrawImage(snapshot, 0, 0);
+
+        var destinationRect = shaderEffect.DestinationRect ?? SKRect.Create(width, height);
+        var restoreCount = canvas.Save();
+        try
+        {
+            canvas.ClipRect(destinationRect);
+
+            using var layerPaint = new SKPaint
+            {
+                BlendMode = shaderEffect.BlendMode,
+                IsAntialias = shaderEffect.IsAntialias
+            };
+            var layerRestoreCount = canvas.SaveLayer(destinationRect, layerPaint);
+            try
+            {
+                if (useRuntimeShader)
+                {
+                    Assert.NotNull(shaderEffect.Shader);
+                    using var paint = new SKPaint
+                    {
+                        Shader = shaderEffect.Shader,
+                        BlendMode = SKBlendMode.SrcOver,
+                        IsAntialias = shaderEffect.IsAntialias
+                    };
+                    canvas.DrawRect(destinationRect, paint);
+                }
+                else
+                {
+                    shaderEffect.RenderFallback(canvas, snapshot);
+                }
+
+                using var maskPaint = new SKPaint { BlendMode = SKBlendMode.DstIn };
+                canvas.DrawImage(snapshot, 0, 0, maskPaint);
+            }
+            finally
+            {
+                canvas.RestoreToCount(layerRestoreCount);
+            }
+        }
+        finally
+        {
+            canvas.RestoreToCount(restoreCount);
+        }
+
+        canvas.Flush();
+        using var image = surface.Snapshot();
+        image.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0);
+        return bitmap;
+    }
+
+    private static void AssertColorClose(SKColor actual, SKColor expected, int tolerance)
+    {
+        Assert.True(Math.Abs(actual.Red - expected.Red) <= tolerance, $"Red mismatch: actual={actual.Red}, expected={expected.Red}, tolerance={tolerance}.");
+        Assert.True(Math.Abs(actual.Green - expected.Green) <= tolerance, $"Green mismatch: actual={actual.Green}, expected={expected.Green}, tolerance={tolerance}.");
+        Assert.True(Math.Abs(actual.Blue - expected.Blue) <= tolerance, $"Blue mismatch: actual={actual.Blue}, expected={expected.Blue}, tolerance={tolerance}.");
+        Assert.True(Math.Abs(actual.Alpha - expected.Alpha) <= tolerance, $"Alpha mismatch: actual={actual.Alpha}, expected={expected.Alpha}, tolerance={tolerance}.");
+    }
+
+    private static void AssertShaderPremultipliesColorOutput(Type factoryType)
+    {
+        var shaderSourceField = factoryType.GetField("ShaderSource", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(shaderSourceField);
+
+        var shaderSource = Assert.IsType<string>(shaderSourceField!.GetRawConstantValue());
+        Assert.Contains("premulAlpha", shaderSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("return half4(red, green, blue, alpha);", shaderSource, StringComparison.Ordinal);
     }
 
     private static T ReadProperty<T>(object instance, string propertyName)

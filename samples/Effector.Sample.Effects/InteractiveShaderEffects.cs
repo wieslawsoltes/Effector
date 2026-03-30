@@ -205,7 +205,8 @@ public sealed class PointerSpotlightShaderEffectFactory :
             float active = max(hover, pressed);
             float intensity = min((strength * active) + (pressBoost * pressed), 1.0);
             float alpha = spot * spot * intensity;
-            return half4(red, green, blue, alpha);
+            half premulAlpha = half(alpha);
+            return half4(red * premulAlpha, green * premulAlpha, blue * premulAlpha, premulAlpha);
         }
         """;
 
@@ -482,7 +483,8 @@ public sealed class ReactiveGridShaderEffectFactory :
             float active = max(hover, pressed);
             float alpha = (baseGrid * (strength * 0.45)) + (halo * active * (0.18 + (pressBoost * pressed)));
             alpha = min(alpha, 1.0);
-            return half4(red, green, blue, alpha);
+            half premulAlpha = half(alpha);
+            return half4(red * premulAlpha, green * premulAlpha, blue * premulAlpha, premulAlpha);
         }
         """;
 
