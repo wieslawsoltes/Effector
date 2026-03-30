@@ -23,7 +23,7 @@ public static class EffectorRuntime
     private const string SupportedAvaloniaVersion = "11.3.12";
     private static readonly Version? SkiaSharpAssemblyVersion = typeof(SKRuntimeEffect).Assembly.GetName().Version;
     private static readonly bool IsNativeAot = GetIsNativeAot();
-    private static readonly bool DirectRuntimeShadersOptIn = ParseBooleanEnvironmentVariable("EFFECTOR_ENABLE_DIRECT_RUNTIME_SHADERS");
+    private static readonly bool? DirectRuntimeShadersOverride = ParseOptionalBooleanEnvironmentVariable("EFFECTOR_ENABLE_DIRECT_RUNTIME_SHADERS");
     private static readonly string? ShaderTracePath = Environment.GetEnvironmentVariable("EFFECTOR_SHADER_TRACE_PATH");
     private static readonly string? ShaderSnapshotDir = Environment.GetEnvironmentVariable("EFFECTOR_SHADER_SNAPSHOT_DIR");
 
@@ -161,11 +161,21 @@ public static class EffectorRuntime
         }
     }
 
+    // Effector depends on SkiaSharp 3.x+, so direct runtime shaders should be
+    // enabled by default on supported runtimes. The env var can still force the
+    // path on or off, and fallback renderers still cover shader compilation
+    // failures plus non-compositor-backed draw paths.
     internal static bool DirectRuntimeShadersEnabledByDefault =>
-        (SkiaSharpAssemblyVersion?.Major ?? 0) < 3;
+        SupportsDirectRuntimeShadersByDefault(SkiaSharpAssemblyVersion);
 
     internal static bool DirectRuntimeShadersEnabled =>
-        DirectRuntimeShadersOptIn || DirectRuntimeShadersEnabledByDefault;
+        ResolveDirectRuntimeShadersEnabled(DirectRuntimeShadersOverride, SkiaSharpAssemblyVersion);
+
+    internal static bool SupportsDirectRuntimeShadersByDefault(Version? skiaSharpAssemblyVersion) =>
+        (skiaSharpAssemblyVersion?.Major ?? 0) >= 3;
+
+    internal static bool ResolveDirectRuntimeShadersEnabled(bool? directRuntimeShadersOverride, Version? skiaSharpAssemblyVersion) =>
+        directRuntimeShadersOverride ?? SupportsDirectRuntimeShadersByDefault(skiaSharpAssemblyVersion);
 
     public static void Register(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor | DynamicallyAccessedMemberTypes.PublicProperties)]
@@ -2593,19 +2603,30 @@ public static class EffectorRuntime
         return 0.288675f * (float)radius + 0.5f;
     }
 
-    private static bool ParseBooleanEnvironmentVariable(string variableName)
+    private static bool? ParseOptionalBooleanEnvironmentVariable(string variableName)
     {
         var value = Environment.GetEnvironmentVariable(variableName);
         if (string.IsNullOrWhiteSpace(value))
         {
-            return false;
+            return null;
         }
 
         value = value.Trim();
-        return value.Equals("1", StringComparison.Ordinal) ||
-               value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
-               value.Equals("on", StringComparison.OrdinalIgnoreCase) ||
-               bool.TryParse(value, out var enabled) && enabled;
+        if (value.Equals("1", StringComparison.Ordinal) ||
+            value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("on", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (value.Equals("0", StringComparison.Ordinal) ||
+            value.Equals("no", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("off", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return bool.TryParse(value, out var enabled) ? enabled : null;
     }
 
     public static bool IsRegisteredEffect(IEffect? effect) =>

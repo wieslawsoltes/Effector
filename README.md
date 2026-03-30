@@ -166,6 +166,7 @@ previewBorder.Effect = new TintEffect
 ## Shader Effects
 
 Runtime shaders use `ISkiaShaderEffectFactory<T>` and `ISkiaShaderEffectValueFactory`. Effector can route the effect through `SKRuntimeEffect` or a fallback renderer depending on runtime capabilities.
+On supported SkiaSharp 3.x runtimes, direct runtime shaders are enabled by default. Set `EFFECTOR_ENABLE_DIRECT_RUNTIME_SHADERS=false` to force the fallback path when needed; fallback renderers are still used automatically when shader compilation fails or the active draw path cannot execute runtime shaders.
 
 ```csharp
 public sealed class ScanlineShaderEffectFactory :

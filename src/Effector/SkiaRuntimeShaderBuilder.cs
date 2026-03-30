@@ -32,6 +32,33 @@ public static class SkiaRuntimeShaderBuilder
         SKRect? destinationRect = null,
         SKMatrix? localMatrix = null,
         Action<SKCanvas, SKImage, SKRect>? fallbackRenderer = null)
+        => CreateCore(
+            sksl,
+            context,
+            configureUniforms,
+            configureChildren,
+            contentChildName,
+            isOpaque,
+            blendMode,
+            isAntialias,
+            destinationRect,
+            localMatrix,
+            fallbackRenderer,
+            EffectorRuntime.DirectRuntimeShadersEnabled);
+
+    internal static SkiaShaderEffect CreateCore(
+        string sksl,
+        SkiaShaderEffectContext context,
+        Action<SKRuntimeEffectUniforms>? configureUniforms,
+        Action<SKRuntimeEffectChildren, SkiaShaderEffectContext>? configureChildren,
+        string? contentChildName,
+        bool isOpaque,
+        SKBlendMode blendMode,
+        bool isAntialias,
+        SKRect? destinationRect,
+        SKMatrix? localMatrix,
+        Action<SKCanvas, SKImage, SKRect>? fallbackRenderer,
+        bool directRuntimeShadersEnabled)
     {
         if (string.IsNullOrWhiteSpace(sksl))
         {
@@ -41,7 +68,7 @@ public static class SkiaRuntimeShaderBuilder
         var resolvedDestinationRect = destinationRect ?? context.EffectBounds;
         var resolvedLocalMatrix = localMatrix ?? SKMatrix.CreateTranslation(-resolvedDestinationRect.Left, -resolvedDestinationRect.Top);
 
-        if (!EffectorRuntime.DirectRuntimeShadersEnabled && fallbackRenderer is not null)
+        if (!directRuntimeShadersEnabled && fallbackRenderer is not null)
         {
             return new SkiaShaderEffect(null, blendMode, isAntialias, resolvedDestinationRect, resolvedLocalMatrix, fallbackRenderer);
         }
