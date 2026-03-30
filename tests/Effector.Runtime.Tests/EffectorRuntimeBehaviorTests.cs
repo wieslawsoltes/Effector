@@ -163,6 +163,64 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void HostBounds_Update_When_RenderTransform_Mutates_InPlace()
+    {
+        RunOnUiThread(() =>
+        {
+            var effect = new GridShaderEffect
+            {
+                CellSize = 16d,
+                Strength = 0.4d,
+                Color = Color.Parse("#00D9FF")
+            };
+
+            var scale = new ScaleTransform(1d, 1d);
+            var host = new Border
+            {
+                Width = 120,
+                Height = 80,
+                Effect = effect,
+                RenderTransform = scale,
+                RenderTransformOrigin = RelativePoint.Center
+            };
+
+            var canvas = new Canvas
+            {
+                Width = 320,
+                Height = 220,
+                Children = { host }
+            };
+
+            var window = new Window
+            {
+                Width = 320,
+                Height = 220,
+                Content = canvas
+            };
+
+            Canvas.SetLeft(host, 48d);
+            Canvas.SetTop(host, 36d);
+            window.Show();
+            window.UpdateLayout();
+
+            var initialBounds = GetStoredHostBounds(effect);
+
+            scale.ScaleX = 1.4d;
+            scale.ScaleY = 1.25d;
+
+            var updatedBounds = GetStoredHostBounds(effect);
+            var expectedBounds = GetVisualBoundsRelativeTo(host, window);
+
+            Assert.True(updatedBounds.Width > initialBounds.Width + 20d);
+            Assert.True(updatedBounds.Height > initialBounds.Height + 10d);
+            Assert.True(Math.Abs(updatedBounds.X - expectedBounds.X) <= 2d);
+            Assert.True(Math.Abs(updatedBounds.Y - expectedBounds.Y) <= 2d);
+            Assert.True(Math.Abs(updatedBounds.Width - expectedBounds.Width) <= 2d);
+            Assert.True(Math.Abs(updatedBounds.Height - expectedBounds.Height) <= 2d);
+        });
+    }
+
+    [Fact]
     public void GetEffectOutputPadding_UsesCustomFactory_ForGlowEffect()
     {
         RunOnUiThread(() =>
@@ -425,6 +483,21 @@ public sealed class EffectorRuntimeBehaviorTests
         var selected = (Rect?)selectMethod.Invoke(null, new object?[] { null, staleHostBounds, renderThreadBounds });
 
         Assert.Equal(staleHostBounds, selected);
+    }
+
+    [Fact]
+    public void ShaderBoundsSelection_Prefers_TransformedHostBounds_Over_ClipRect()
+    {
+        var selectMethod = typeof(EffectorRuntime).GetMethod(
+            "SelectAuthoritativeEffectRectForHostPreference",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var staleClipRect = new Rect(48d, 36d, 120d, 80d);
+        var transformedHostBounds = new Rect(24d, 26d, 168d, 100d);
+
+        var selected = (Rect?)selectMethod.Invoke(null, new object?[] { staleClipRect, transformedHostBounds, null, true });
+
+        Assert.Equal(transformedHostBounds, selected);
     }
 
     [Fact]
@@ -2065,6 +2138,37 @@ public sealed class EffectorRuntimeBehaviorTests
         var property = instance.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         Assert.NotNull(property);
         return (T)property!.GetValue(instance)!;
+    }
+
+    private static Rect GetStoredHostBounds(IEffect effect)
+    {
+        var tryGetBoundsMethod = typeof(EffectorRuntime).GetMethod(
+            "TryGetHostVisualBounds",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        var args = new object?[] { effect, null };
+        var success = (bool)tryGetBoundsMethod.Invoke(null, args)!;
+
+        Assert.True(success);
+        return Assert.IsType<Rect>(args[1]);
+    }
+
+    private static Rect GetVisualBoundsRelativeTo(Visual visual, Visual root)
+    {
+        var topLeft = visual.TranslatePoint(new Point(0d, 0d), root);
+        var topRight = visual.TranslatePoint(new Point(visual.Bounds.Width, 0d), root);
+        var bottomLeft = visual.TranslatePoint(new Point(0d, visual.Bounds.Height), root);
+        var bottomRight = visual.TranslatePoint(new Point(visual.Bounds.Width, visual.Bounds.Height), root);
+
+        Assert.True(topLeft.HasValue);
+        Assert.True(topRight.HasValue);
+        Assert.True(bottomLeft.HasValue);
+        Assert.True(bottomRight.HasValue);
+
+        var minX = Math.Min(Math.Min(topLeft!.Value.X, topRight!.Value.X), Math.Min(bottomLeft!.Value.X, bottomRight!.Value.X));
+        var minY = Math.Min(Math.Min(topLeft.Value.Y, topRight.Value.Y), Math.Min(bottomLeft.Value.Y, bottomRight.Value.Y));
+        var maxX = Math.Max(Math.Max(topLeft.Value.X, topRight.Value.X), Math.Max(bottomLeft.Value.X, bottomRight.Value.X));
+        var maxY = Math.Max(Math.Max(topLeft.Value.Y, topRight.Value.Y), Math.Max(bottomLeft.Value.Y, bottomRight.Value.Y));
+        return new Rect(minX, minY, Math.Max(0d, maxX - minX), Math.Max(0d, maxY - minY));
     }
 
     private static string GetScreenshotPath(string fileName)
