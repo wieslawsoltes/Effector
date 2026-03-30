@@ -8,6 +8,7 @@
     <_EffectorLocalRuntimeRefObjPath Condition="'$(_EffectorLocalRuntimeRefObjPath)' == ''">$([System.IO.Path]::GetFullPath('$(BaseIntermediateOutputPath)effector-runtime-ref\'))</_EffectorLocalRuntimeRefObjPath>
     <_EffectorTaskAssemblyPath Condition="'$(_EffectorTaskAssemblyPath)' == '' and Exists('$(_EffectorPackagedTaskAssemblyPath)')">$(_EffectorPackagedTaskAssemblyPath)</_EffectorTaskAssemblyPath>
     <_EffectorTaskAssemblyPath Condition="'$(_EffectorTaskAssemblyPath)' == '' and Exists('$(_EffectorLocalTaskProjectPath)')">$(_EffectorLocalTaskAssemblyPath)</_EffectorTaskAssemblyPath>
+    <_EffectorAndroidAssetsDir Condition="'$(_EffectorAndroidAssetsDir)' == ''">$([System.IO.Path]::Combine('$(IntermediateOutputPath)', 'android', 'assets'))</_EffectorAndroidAssetsDir>
   </PropertyGroup>
 
   <UsingTask TaskName="Effector.Build.Tasks.WeaveSkiaEffectsTask"
@@ -55,6 +56,26 @@
                                  Strict="$(EffectorStrict)"
                                  Verbose="$(EffectorVerbose)"
                                  SupportedAvaloniaVersion="$(EffectorSupportedAvaloniaVersion)" />
+  </Target>
+
+  <Target Name="Effector_PatchAvaloniaAndroidAssemblies"
+          AfterTargets="_PrepareAssemblies"
+          BeforeTargets="_BuildApkEmbed"
+          DependsOnTargets="Effector_BuildLocalTask"
+          Condition="'$(EffectorEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(AndroidApplication)' == 'true' and Exists('$(_EffectorAndroidAssetsDir)')">
+    <ItemGroup>
+      <_EffectorAndroidAvaloniaBase Include="$(_EffectorAndroidAssetsDir)/*/Avalonia.Base.dll" />
+      <_EffectorAndroidAvaloniaPatch Include="@(_EffectorAndroidAvaloniaBase)">
+        <EffectorAvaloniaSkiaAssemblyPath>%(RootDir)%(Directory)Avalonia.Skia.dll</EffectorAvaloniaSkiaAssemblyPath>
+      </_EffectorAndroidAvaloniaPatch>
+    </ItemGroup>
+
+    <PatchAvaloniaAssembliesTask AvaloniaBaseAssemblyPath="%(_EffectorAndroidAvaloniaPatch.FullPath)"
+                                 AvaloniaSkiaAssemblyPath="%(_EffectorAndroidAvaloniaPatch.EffectorAvaloniaSkiaAssemblyPath)"
+                                 Strict="$(EffectorStrict)"
+                                 Verbose="$(EffectorVerbose)"
+                                 SupportedAvaloniaVersion="$(EffectorSupportedAvaloniaVersion)"
+                                 Condition="'@(_EffectorAndroidAvaloniaPatch)' != ''" />
   </Target>
 
   <Target Name="Effector_PatchAvaloniaAotCompileAssemblies"
