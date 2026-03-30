@@ -598,16 +598,60 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
-    public void DirectRuntimeShaderPath_IsDisabledByDefault_On_SkiaSharp3()
+    public void DirectRuntimeShaderPath_IsEnabledByDefault_On_Supported_SkiaSharp()
     {
         var skiaVersion = typeof(SKRuntimeEffect).Assembly.GetName().Version;
         Assert.NotNull(skiaVersion);
 
         if (skiaVersion!.Major >= 3)
         {
-            Assert.False(EffectorRuntime.DirectRuntimeShadersEnabledByDefault);
-            Assert.False(EffectorRuntime.DirectRuntimeShadersEnabled);
+            Assert.True(EffectorRuntime.DirectRuntimeShadersEnabledByDefault);
+            Assert.True(EffectorRuntime.DirectRuntimeShadersEnabled);
         }
+    }
+
+    [Fact]
+    public void DirectRuntimeShaderOverride_Can_Enable_And_Disable_RuntimeShaderPath()
+    {
+        Assert.True(EffectorRuntime.ResolveDirectRuntimeShadersEnabled(directRuntimeShadersOverride: null, new Version(3, 119, 2)));
+        Assert.False(EffectorRuntime.ResolveDirectRuntimeShadersEnabled(directRuntimeShadersOverride: false, new Version(3, 119, 2)));
+        Assert.False(EffectorRuntime.ResolveDirectRuntimeShadersEnabled(directRuntimeShadersOverride: null, new Version(2, 88, 0)));
+        Assert.True(EffectorRuntime.ResolveDirectRuntimeShadersEnabled(directRuntimeShadersOverride: true, new Version(2, 88, 0)));
+    }
+
+    [Fact]
+    public void ShaderBuilder_Creates_RuntimeShader_When_DirectRuntimeShaders_Are_Enabled_Even_With_Fallback()
+    {
+        using var surface = SKSurface.Create(new SKImageInfo(64, 48));
+        Assert.NotNull(surface);
+        using var snapshot = surface!.Snapshot();
+        var context = new SkiaShaderEffectContext(
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            snapshot,
+            new SKRect(0, 0, 64, 48),
+            new SKRect(0, 0, 64, 48));
+
+        using var shaderEffect = SkiaRuntimeShaderBuilder.CreateCore(
+            "half4 main(float2 coord) { return half4(1.0, 0.0, 0.0, 1.0); }",
+            context,
+            configureUniforms: null,
+            configureChildren: null,
+            contentChildName: null,
+            isOpaque: false,
+            blendMode: SKBlendMode.SrcOver,
+            isAntialias: true,
+            destinationRect: null,
+            localMatrix: null,
+            fallbackRenderer: static (canvas, _, rect) =>
+            {
+                using var paint = new SKPaint { Color = SKColors.Red };
+                canvas.DrawRect(rect, paint);
+            },
+            directRuntimeShadersEnabled: true);
+
+        Assert.NotNull(shaderEffect);
+        Assert.NotNull(shaderEffect.Shader);
+        Assert.NotNull(shaderEffect.FallbackRenderer);
     }
 
     [Fact]
@@ -627,11 +671,6 @@ public sealed class EffectorRuntimeBehaviorTests
     [Fact]
     public void ShaderBuilder_Uses_Fallback_When_DirectRuntimeShaders_Are_Disabled()
     {
-        if (EffectorRuntime.DirectRuntimeShadersEnabled)
-        {
-            return;
-        }
-
         using var surface = SKSurface.Create(new SKImageInfo(64, 48));
         Assert.NotNull(surface);
         using var snapshot = surface!.Snapshot();
@@ -641,14 +680,23 @@ public sealed class EffectorRuntimeBehaviorTests
             new SKRect(0, 0, 64, 48),
             new SKRect(0, 0, 64, 48));
 
-        using var shaderEffect = SkiaRuntimeShaderBuilder.Create(
+        using var shaderEffect = SkiaRuntimeShaderBuilder.CreateCore(
             "half4 main(float2 coord) { return half4(1.0, 0.0, 0.0, 1.0); }",
             context,
+            configureUniforms: null,
+            configureChildren: null,
+            contentChildName: null,
+            isOpaque: false,
+            blendMode: SKBlendMode.SrcOver,
+            isAntialias: true,
+            destinationRect: null,
+            localMatrix: null,
             fallbackRenderer: static (canvas, _, rect) =>
             {
                 using var paint = new SKPaint { Color = SKColors.Red };
                 canvas.DrawRect(rect, paint);
-            });
+            },
+            directRuntimeShadersEnabled: false);
 
         Assert.NotNull(shaderEffect);
         Assert.Null(shaderEffect.Shader);
