@@ -1848,7 +1848,7 @@ public static class EffectorRuntime
     private static bool TryPeekActiveFrame(
         Dictionary<object, Stack<EffectorShaderEffectFrame>> frames,
         object instance,
-        [NotNullWhen(true)] out EffectorShaderEffectFrame? frame)
+        out EffectorShaderEffectFrame? frame)
     {
         if (frames.TryGetValue(instance, out var stack) && stack.Count > 0)
         {
