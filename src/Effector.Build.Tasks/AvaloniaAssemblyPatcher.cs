@@ -15,6 +15,15 @@ namespace Effector.Build.Tasks;
 
 internal sealed class AvaloniaAssemblyPatcher
 {
+    private static MethodInfo GetEffectorRuntimeMethod(string name, params Type[] parameterTypes) =>
+        typeof(EffectorRuntime).GetMethod(
+            name,
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+            binder: null,
+            types: parameterTypes,
+            modifiers: null)
+        ?? throw new MissingMethodException(typeof(EffectorRuntime).FullName, name);
+
     public AvaloniaAssemblyPatchResult Patch(string assemblyPath, AvaloniaPatchAssemblyKind kind, string supportedVersion)
     {
         var result = new AvaloniaAssemblyPatchResult(assemblyPath, kind);
@@ -404,7 +413,11 @@ internal sealed class AvaloniaAssemblyPatcher
         il.Emit(OpCodes.Ldfld, currentOpacityField);
         il.Emit(OpCodes.Ldarg_0);
         il.Emit(OpCodes.Ldfld, useOpacitySaveLayerField);
-        il.Emit(OpCodes.Call, module.ImportReference(typeof(EffectorRuntime).GetMethod(nameof(EffectorRuntime.CreateEffectPatched))!));
+        il.Emit(OpCodes.Call, module.ImportReference(GetEffectorRuntimeMethod(
+            nameof(EffectorRuntime.CreateEffectPatched),
+            typeof(IEffect),
+            typeof(double),
+            typeof(bool))));
         il.Emit(OpCodes.Ret);
     }
 
