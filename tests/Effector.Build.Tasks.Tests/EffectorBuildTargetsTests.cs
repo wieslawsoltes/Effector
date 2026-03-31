@@ -133,13 +133,7 @@ public sealed class EffectorBuildTargetsTests
                 ? "Release"
                 : "Debug";
 
-        var copiedTaskAssemblyPath = Path.Combine(AppContext.BaseDirectory, "Effector.Build.Tasks.dll");
-        if (File.Exists(copiedTaskAssemblyPath))
-        {
-            return copiedTaskAssemblyPath;
-        }
-
-        return ResolveRepositoryFile(
+        var builtTaskAssemblyPath = ResolveRepositoryFile(
             new[]
             {
                 "src",
@@ -150,6 +144,18 @@ public sealed class EffectorBuildTargetsTests
                 "Effector.Build.Tasks.dll"
             },
             sourceFilePath);
+        if (File.Exists(builtTaskAssemblyPath))
+        {
+            return builtTaskAssemblyPath;
+        }
+
+        var copiedTaskAssemblyPath = Path.Combine(AppContext.BaseDirectory, "Effector.Build.Tasks.dll");
+        if (File.Exists(copiedTaskAssemblyPath))
+        {
+            return copiedTaskAssemblyPath;
+        }
+
+        return builtTaskAssemblyPath;
     }
 
     private static string GetAvaloniaBasePath() =>

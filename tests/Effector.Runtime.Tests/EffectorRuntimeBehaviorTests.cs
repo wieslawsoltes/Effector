@@ -78,9 +78,9 @@ public sealed class EffectorRuntimeBehaviorTests
     {
         RunOnUiThread(() =>
         {
-            Assert.IsAssignableFrom<IEffect>(new TintEffect());
-            Assert.IsAssignableFrom<IEffect>(new PixelateEffect());
-            Assert.IsAssignableFrom<IEffect>(new ScanlineShaderEffect());
+            Assert.IsAssignableFrom<IEffect>(EffectTestHelpers.AsEffect(new TintEffect()));
+            Assert.IsAssignableFrom<IEffect>(EffectTestHelpers.AsEffect(new PixelateEffect()));
+            Assert.IsAssignableFrom<IEffect>(EffectTestHelpers.AsEffect(new ScanlineShaderEffect()));
         });
     }
 
@@ -95,7 +95,7 @@ public sealed class EffectorRuntimeBehaviorTests
                 Strength = 0.55d
             };
 
-            var immutable = EffectExtensions.ToImmutable(effect);
+            var immutable = EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(effect));
 
             Assert.NotNull(immutable);
             Assert.NotSame(effect, immutable);
@@ -119,7 +119,7 @@ public sealed class EffectorRuntimeBehaviorTests
             {
                 Width = 120,
                 Height = 80,
-                Effect = effect
+                Effect = EffectTestHelpers.AsEffect(effect)
             };
 
             var canvas = new Canvas
@@ -141,7 +141,7 @@ public sealed class EffectorRuntimeBehaviorTests
             window.Show();
             window.UpdateLayout();
 
-            var immutable = EffectExtensions.ToImmutable(effect);
+            var immutable = EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(effect));
 
             Canvas.SetLeft(host, 72d);
             Canvas.SetTop(host, 44d);
@@ -185,7 +185,7 @@ public sealed class EffectorRuntimeBehaviorTests
             {
                 Width = 120,
                 Height = 80,
-                Effect = effect,
+                Effect = EffectTestHelpers.AsEffect(effect),
                 RenderTransform = scale,
                 RenderTransformOrigin = RelativePoint.Center
             };
@@ -243,7 +243,7 @@ public sealed class EffectorRuntimeBehaviorTests
             {
                 Width = 120,
                 Height = 80,
-                Effect = instance,
+                Effect = EffectTestHelpers.AsEffect(instance),
                 RenderTransform = scale,
                 RenderTransformOrigin = RelativePoint.Center
             };
@@ -309,7 +309,7 @@ public sealed class EffectorRuntimeBehaviorTests
 
             var context = (SkiaEffectContext)createContextMethod.Invoke(
                 null,
-                new object?[] { effect, 1d, false, renderBounds })!;
+                new object?[] { EffectTestHelpers.AsEffect(effect), 1d, false, renderBounds })!;
 
             Assert.Equal(new Rect(0d, 0d, 320d, 220d), context.InputBounds);
             Assert.Equal(new Rect(164d, 116d, 320d, 220d), context.SceneBounds);
@@ -329,7 +329,7 @@ public sealed class EffectorRuntimeBehaviorTests
             };
 
             var bounds = new Rect(140d, 92d, 368d, 268d);
-            EffectorRuntime.RecordRenderThreadEffect(effect, new object(), bounds, new Border());
+            EffectorRuntime.RecordRenderThreadEffect(EffectTestHelpers.AsEffect(effect), new object(), bounds, new Border());
 
             var takeBoundsMethod = typeof(EffectorRuntime).GetMethod(
                 "TakeRenderThreadEffectBounds",
@@ -354,7 +354,7 @@ public sealed class EffectorRuntimeBehaviorTests
                 Strength = 0.5d
             };
 
-            EffectorRuntime.RecordRenderThreadEffect(effect, new object(), new Rect(20d, 30d, 140d, 80d), new Border());
+            EffectorRuntime.RecordRenderThreadEffect(EffectTestHelpers.AsEffect(effect), new object(), new Rect(20d, 30d, 140d, 80d), new Border());
 
             var takeBoundsMethod = typeof(EffectorRuntime).GetMethod(
                 "TakeRenderThreadEffectBounds",
@@ -370,58 +370,61 @@ public sealed class EffectorRuntimeBehaviorTests
     [Fact]
     public void ActiveCaptureLookup_Prefers_MostRecently_Pushed_Frame_Across_Frame_Stacks()
     {
-        using var previousSurface = SKSurface.Create(new SKImageInfo(256, 128));
-        using var capturedSurface = SKSurface.Create(new SKImageInfo(96, 64));
-        using var shaderSurface = SKSurface.Create(new SKImageInfo(96, 64));
-        Assert.NotNull(previousSurface);
-        Assert.NotNull(capturedSurface);
-        Assert.NotNull(shaderSurface);
-
-        var drawingContext = new object();
-        var runtimeType = typeof(EffectorRuntime);
-        var pushCaptureFrame = runtimeType.GetMethod(
-            "PushCaptureFrame",
-            BindingFlags.Static | BindingFlags.NonPublic)!;
-        var sync = ReadPrivateStaticField<object>(runtimeType, "Sync");
-        var capturedFrames = ReadPrivateStaticField<Dictionary<object, Stack<EffectorShaderEffectFrame>>>(runtimeType, "CapturedFilterFrames");
-        var shaderFrames = ReadPrivateStaticField<Dictionary<object, Stack<EffectorShaderEffectFrame>>>(runtimeType, "ShaderFrames");
-
-        var capturedFrame = CreateTestCaptureFrame(
-            new FilterEffect(),
-            previousSurface!.Canvas,
-            previousSurface,
-            capturedSurface!,
-            new SKRect(40f, 12f, 88f, 52f));
-        var shaderFrame = CreateTestCaptureFrame(
-            new ScanlineShaderEffect(),
-            previousSurface.Canvas,
-            previousSurface,
-            shaderSurface!,
-            new SKRect(96f, 64f, 160f, 112f));
-
-        try
+        RunOnUiThread(() =>
         {
-            pushCaptureFrame.Invoke(null, new object[] { capturedFrames, drawingContext, capturedFrame, "test:captured" });
-            pushCaptureFrame.Invoke(null, new object[] { shaderFrames, drawingContext, shaderFrame, "test:shader" });
+            using var previousSurface = SKSurface.Create(new SKImageInfo(256, 128));
+            using var capturedSurface = SKSurface.Create(new SKImageInfo(96, 64));
+            using var shaderSurface = SKSurface.Create(new SKImageInfo(96, 64));
+            Assert.NotNull(previousSurface);
+            Assert.NotNull(capturedSurface);
+            Assert.NotNull(shaderSurface);
 
-            Assert.True(EffectorRuntime.TryGetActiveCaptureSurface(drawingContext, out var activeSurface));
-            Assert.Same(shaderSurface, activeSurface);
+            var drawingContext = new object();
+            var runtimeType = typeof(EffectorRuntime);
+            var pushCaptureFrame = runtimeType.GetMethod(
+                "PushCaptureFrame",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var sync = ReadPrivateStaticField<object>(runtimeType, "Sync");
+            var capturedFrames = ReadPrivateStaticField<Dictionary<object, Stack<EffectorShaderEffectFrame>>>(runtimeType, "CapturedFilterFrames");
+            var shaderFrames = ReadPrivateStaticField<Dictionary<object, Stack<EffectorShaderEffectFrame>>>(runtimeType, "ShaderFrames");
 
-            var adjusted = EffectorRuntime.AdjustTransformForActiveCaptureFrame(drawingContext, Matrix.Identity);
-            Assert.Equal(-96d, adjusted.M31, 3);
-            Assert.Equal(-64d, adjusted.M32, 3);
-        }
-        finally
-        {
-            lock (sync)
+            var capturedFrame = CreateTestCaptureFrame(
+                new FilterEffect(),
+                previousSurface!.Canvas,
+                previousSurface,
+                capturedSurface!,
+                new SKRect(40f, 12f, 88f, 52f));
+            var shaderFrame = CreateTestCaptureFrame(
+                new ScanlineShaderEffect(),
+                previousSurface.Canvas,
+                previousSurface,
+                shaderSurface!,
+                new SKRect(96f, 64f, 160f, 112f));
+
+            try
             {
-                capturedFrames.Remove(drawingContext);
-                shaderFrames.Remove(drawingContext);
-            }
+                pushCaptureFrame.Invoke(null, new object[] { capturedFrames, drawingContext, capturedFrame, "test:captured" });
+                pushCaptureFrame.Invoke(null, new object[] { shaderFrames, drawingContext, shaderFrame, "test:shader" });
 
-            capturedFrame.Dispose();
-            shaderFrame.Dispose();
-        }
+                Assert.True(EffectorRuntime.TryGetActiveCaptureSurface(drawingContext, out var activeSurface));
+                Assert.Same(shaderSurface, activeSurface);
+
+                var adjusted = EffectorRuntime.AdjustTransformForActiveCaptureFrame(drawingContext, Matrix.Identity);
+                Assert.Equal(-96d, adjusted.M31, 3);
+                Assert.Equal(-64d, adjusted.M32, 3);
+            }
+            finally
+            {
+                lock (sync)
+                {
+                    capturedFrames.Remove(drawingContext);
+                    shaderFrames.Remove(drawingContext);
+                }
+
+                capturedFrame.Dispose();
+                shaderFrame.Dispose();
+            }
+        });
     }
 
     [Fact]
@@ -484,31 +487,31 @@ public sealed class EffectorRuntimeBehaviorTests
                 Strength = 0.55d
             };
 
-            var immutable = EffectExtensions.ToImmutable(left);
+            var immutable = EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(left));
             var equalsMethod = immutable.GetType().GetMethod(nameof(IEquatable<IEffect>.Equals), new[] { typeof(IEffect) });
 
             Assert.NotNull(equalsMethod);
-            Assert.True((bool)equalsMethod!.Invoke(immutable, new object[] { right })!);
-            Assert.False((bool)equalsMethod.Invoke(immutable, new object[] { different })!);
+            Assert.True((bool)equalsMethod!.Invoke(immutable, new object[] { EffectTestHelpers.AsEffect(right) })!);
+            Assert.False((bool)equalsMethod.Invoke(immutable, new object[] { EffectTestHelpers.AsEffect(different) })!);
         });
     }
 
     [Fact]
     public async Task FrozenEffects_Are_RenderThreadSafe_ForEqualityPaddingAndFilter()
     {
-        var frozen = RunOnUiThread(() => EffectExtensions.ToImmutable(new GlowEffect
+        var frozen = RunOnUiThread(() => EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(new GlowEffect
         {
             Color = Color.Parse("#FFD54A"),
             BlurRadius = 14d,
             Intensity = 0.75d
-        }));
+        })));
 
-        var equalFrozen = RunOnUiThread(() => EffectExtensions.ToImmutable(new GlowEffect
+        var equalFrozen = RunOnUiThread(() => EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(new GlowEffect
         {
             Color = Color.Parse("#FFD54A"),
             BlurRadius = 14d,
             Intensity = 0.75d
-        }));
+        })));
 
         var result = await Task.Run(() =>
         {
@@ -532,14 +535,14 @@ public sealed class EffectorRuntimeBehaviorTests
     [Fact]
     public async Task FrozenShaderEffects_Are_RenderThreadSafe_ForShaderCreation()
     {
-        var frozen = RunOnUiThread(() => EffectExtensions.ToImmutable(new SpotlightShaderEffect
+        var frozen = RunOnUiThread(() => EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(new SpotlightShaderEffect
         {
             CenterX = 0.6d,
             CenterY = 0.35d,
             Radius = 0.4d,
             Strength = 0.55d,
             Color = Color.Parse("#FFD26B")
-        }));
+        })));
 
         var created = await Task.Run(() =>
         {
@@ -600,7 +603,7 @@ public sealed class EffectorRuntimeBehaviorTests
         Assert.NotNull(captureSurface);
 
         var frame = new EffectorShaderEffectFrame(
-            new ScanlineShaderEffect(),
+            EffectTestHelpers.AsEffect(new ScanlineShaderEffect()),
             previousSurface!.Canvas,
             previousSurface,
             captureSurface!,
@@ -651,7 +654,7 @@ public sealed class EffectorRuntimeBehaviorTests
         Assert.NotNull(captureSurface);
 
         var frame = new EffectorShaderEffectFrame(
-            new Issue10OverlayShaderEffect(),
+            EffectTestHelpers.AsEffect(new Issue10OverlayShaderEffect()),
             previousSurface!.Canvas,
             previousSurface,
             captureSurface!,
@@ -702,7 +705,7 @@ public sealed class EffectorRuntimeBehaviorTests
         Assert.NotNull(captureSurface);
 
         var frame = new EffectorShaderEffectFrame(
-            new Issue10OverlayShaderEffect(),
+            EffectTestHelpers.AsEffect(new Issue10OverlayShaderEffect()),
             previousSurface!.Canvas,
             previousSurface,
             captureSurface!,
@@ -1223,8 +1226,12 @@ public sealed class EffectorRuntimeBehaviorTests
         {
             var effect = new TintEffect();
             var invalidatedCount = 0;
+            var invalidatedEvent = effect.GetType().GetEvent("Invalidated", BindingFlags.Instance | BindingFlags.Public);
+            Assert.NotNull(invalidatedEvent);
 
-            effect.Invalidated += (_, _) => invalidatedCount++;
+            EventHandler handler = (_, _) => invalidatedCount++;
+            invalidatedEvent!.AddEventHandler(effect, handler);
+
             effect.Strength = 0.75d;
 
             Assert.True(invalidatedCount > 0);
@@ -1265,8 +1272,8 @@ public sealed class EffectorRuntimeBehaviorTests
                 new object?[]
                 {
                     progress,
-                    new TintEffect { Color = Color.Parse("#000000"), Strength = 0d },
-                    new TintEffect { Color = Color.Parse("#FFFFFF"), Strength = 1d }
+                    EffectTestHelpers.AsEffect(new TintEffect { Color = Color.Parse("#000000"), Strength = 0d }),
+                    EffectTestHelpers.AsEffect(new TintEffect { Color = Color.Parse("#FFFFFF"), Strength = 1d })
                 })!;
 
             using var subscription = observable.Subscribe(results);
@@ -1303,18 +1310,18 @@ public sealed class EffectorRuntimeBehaviorTests
                 new object?[]
                 {
                     0.5d,
-                    new GlowEffect
+                    EffectTestHelpers.AsEffect(new GlowEffect
                     {
                         BlurRadius = 4d,
                         Intensity = 0.2d,
                         Color = Color.Parse("#FFD54A")
-                    },
-                    new GlowEffect
+                    }),
+                    EffectTestHelpers.AsEffect(new GlowEffect
                     {
                         BlurRadius = 20d,
                         Intensity = 0.8d,
                         Color = Color.Parse("#EB6A8E")
-                    }
+                    })
                 });
 
             Assert.NotNull(value);
@@ -1469,7 +1476,7 @@ public sealed class EffectorRuntimeBehaviorTests
             using var baseline = window.CaptureRenderedFrame();
             Assert.NotNull(baseline);
 
-            content.Effect = new PixelateEffect { CellSize = 14d };
+            content.Effect = EffectTestHelpers.AsEffect(new PixelateEffect { CellSize = 14d });
             window.UpdateLayout();
 
             using var effected = window.CaptureRenderedFrame();
@@ -1530,14 +1537,14 @@ public sealed class EffectorRuntimeBehaviorTests
             using var baseline = window.CaptureRenderedFrame();
             Assert.NotNull(baseline);
 
-            content.Effect = new SpotlightShaderEffect
+            content.Effect = EffectTestHelpers.AsEffect(new SpotlightShaderEffect
             {
                 CenterX = 0.62d,
                 CenterY = 0.34d,
                 Radius = 0.46d,
                 Strength = 0.65d,
                 Color = Color.Parse("#FFD26B")
-            };
+            });
             window.UpdateLayout();
 
             using var effected = window.CaptureRenderedFrame();
@@ -1587,12 +1594,12 @@ public sealed class EffectorRuntimeBehaviorTests
             using var baseline = window.CaptureRenderedFrame();
             Assert.NotNull(baseline);
 
-            host.Effect = new GridShaderEffect
+            host.Effect = EffectTestHelpers.AsEffect(new GridShaderEffect
             {
                 CellSize = 12d,
                 Strength = 0.8d,
                 Color = Color.Parse("#00D9FF")
-            };
+            });
             window.UpdateLayout();
 
             using var effected = window.CaptureRenderedFrame();
@@ -1647,11 +1654,11 @@ public sealed class EffectorRuntimeBehaviorTests
             using var baseline = window.CaptureRenderedFrame();
             Assert.NotNull(baseline);
 
-            host.Effect = new ScanlineShaderEffect
+            host.Effect = EffectTestHelpers.AsEffect(new ScanlineShaderEffect
             {
                 Spacing = 8d,
                 Strength = 0.65d
-            };
+            });
             window.UpdateLayout();
 
             using var effected = window.CaptureRenderedFrame();
@@ -1709,12 +1716,12 @@ public sealed class EffectorRuntimeBehaviorTests
             using var baseline = window.CaptureRenderedFrame();
             Assert.NotNull(baseline);
 
-            host.Effect = new GridShaderEffect
+            host.Effect = EffectTestHelpers.AsEffect(new GridShaderEffect
             {
                 CellSize = 16d,
                 Strength = 0.4d,
                 Color = Color.Parse("#22FF66")
-            };
+            });
             EffectorRuntime.ClearShaderDebugInfo();
             window.UpdateLayout();
 
@@ -1809,12 +1816,12 @@ public sealed class EffectorRuntimeBehaviorTests
             using var baseline = window.CaptureRenderedFrame();
             Assert.NotNull(baseline);
 
-            host.Effect = new GridShaderEffect
+            host.Effect = EffectTestHelpers.AsEffect(new GridShaderEffect
             {
                 CellSize = 16d,
                 Strength = 0.4d,
                 Color = Color.Parse("#22FF66")
-            };
+            });
             EffectorRuntime.ClearShaderDebugInfo();
             window.UpdateLayout();
 
@@ -1909,10 +1916,10 @@ public sealed class EffectorRuntimeBehaviorTests
             using var baseline = window.CaptureRenderedFrame();
             Assert.NotNull(baseline);
 
-            host.Effect = new Issue10OverlayShaderEffect
+            host.Effect = EffectTestHelpers.AsEffect(new Issue10OverlayShaderEffect
             {
                 Progress = 0.5d
-            };
+            });
             EffectorRuntime.ClearShaderDebugInfo();
             window.UpdateLayout();
 
@@ -1947,12 +1954,12 @@ public sealed class EffectorRuntimeBehaviorTests
                 Width = 120,
                 Height = 120,
                 Background = Brushes.White,
-                Effect = new GridShaderEffect
+                Effect = EffectTestHelpers.AsEffect(new GridShaderEffect
                 {
                     CellSize = 8d,
                     Strength = 0.8d,
                     Color = Color.Parse("#00D9FF")
-                }
+                })
             };
 
             var window = new Window
@@ -2004,9 +2011,9 @@ public sealed class EffectorRuntimeBehaviorTests
 
             var host = window.GetVisualDescendants()
                 .OfType<Grid>()
-                .FirstOrDefault(static grid => grid.Effect is GridShaderEffect);
+                .FirstOrDefault(static grid => EffectTestHelpers.HasEffectType(grid.Effect, typeof(GridShaderEffect)));
             Assert.NotNull(host);
-            Assert.IsType<GridShaderEffect>(host!.Effect);
+            Assert.True(EffectTestHelpers.HasEffectType(host!.Effect, typeof(GridShaderEffect)));
             host.BringIntoView();
             window.UpdateLayout();
             EffectorRuntime.ClearShaderDebugInfo();
@@ -2075,7 +2082,7 @@ public sealed class EffectorRuntimeBehaviorTests
 
             var host = window.GetVisualDescendants()
                 .OfType<Grid>()
-                .FirstOrDefault(static grid => grid.Effect is ScanlineShaderEffect);
+                .FirstOrDefault(static grid => EffectTestHelpers.HasEffectType(grid.Effect, typeof(ScanlineShaderEffect)));
             Assert.NotNull(host);
 
             host!.BringIntoView();
@@ -2115,13 +2122,13 @@ public sealed class EffectorRuntimeBehaviorTests
 
             var host = window.GetVisualDescendants()
                 .OfType<Grid>()
-                .FirstOrDefault(static grid => grid.Effect is InvertEffect);
+                .FirstOrDefault(static grid => EffectTestHelpers.HasEffectType(grid.Effect, typeof(InvertEffect)));
             Assert.NotNull(host);
 
             host!.BringIntoView();
             window.UpdateLayout();
 
-            var invertEffect = Assert.IsType<InvertEffect>(host.Effect);
+            var invertEffect = Assert.IsType<InvertEffect>((object?)host.Effect);
             invertEffect.Amount = 0.06d;
             window.UpdateLayout();
 
@@ -2157,7 +2164,7 @@ public sealed class EffectorRuntimeBehaviorTests
 
             var host = window.GetVisualDescendants()
                 .OfType<Grid>()
-                .FirstOrDefault(static grid => grid.Effect is EdgeDetectEffect);
+                .FirstOrDefault(static grid => EffectTestHelpers.HasEffectType(grid.Effect, typeof(EdgeDetectEffect)));
             Assert.NotNull(host);
 
             host!.BringIntoView();
@@ -2196,7 +2203,7 @@ public sealed class EffectorRuntimeBehaviorTests
 
             var host = window.GetVisualDescendants()
                 .OfType<Grid>()
-                .FirstOrDefault(static grid => grid.Effect is ScanlineShaderEffect);
+                .FirstOrDefault(static grid => EffectTestHelpers.HasEffectType(grid.Effect, typeof(ScanlineShaderEffect)));
             Assert.NotNull(host);
 
             host!.BringIntoView();
@@ -2306,7 +2313,7 @@ public sealed class EffectorRuntimeBehaviorTests
 
             var host = window.GetVisualDescendants()
                 .OfType<Grid>()
-                .FirstOrDefault(static grid => grid.Effect is ScanlineShaderEffect);
+                .FirstOrDefault(static grid => EffectTestHelpers.HasEffectType(grid.Effect, typeof(ScanlineShaderEffect)));
             Assert.NotNull(host);
 
             var hostPoint = host!.TranslatePoint(new Point(0, 0), scrollViewer!);
@@ -2351,7 +2358,7 @@ public sealed class EffectorRuntimeBehaviorTests
 
             var host = window.GetVisualDescendants()
                 .OfType<Grid>()
-                .FirstOrDefault(static grid => grid.Effect is ScanlineShaderEffect);
+                .FirstOrDefault(static grid => EffectTestHelpers.HasEffectType(grid.Effect, typeof(ScanlineShaderEffect)));
             Assert.NotNull(host);
 
             var hostPoint = host!.TranslatePoint(new Point(0, 0), scrollViewer!);
@@ -2417,7 +2424,7 @@ public sealed class EffectorRuntimeBehaviorTests
                 Height = 180,
                 Margin = new Thickness(20),
                 Background = Brushes.White,
-                Effect = effect,
+                Effect = EffectTestHelpers.AsEffect(effect),
                 Child = new Grid
                 {
                     RowDefinitions = new RowDefinitions("Auto,*"),
@@ -2524,7 +2531,7 @@ public sealed class EffectorRuntimeBehaviorTests
                 Height = 180,
                 Margin = new Thickness(20),
                 Background = Brushes.White,
-                Effect = effect,
+                Effect = EffectTestHelpers.AsEffect(effect),
                 Child = new Grid
                 {
                     RowDefinitions = new RowDefinitions("Auto,*"),
@@ -2653,7 +2660,7 @@ public sealed class EffectorRuntimeBehaviorTests
                 Margin = new Thickness(40),
                 Background = new SolidColorBrush(Color.Parse("#1E2328")),
                 Foreground = Brushes.White,
-                Effect = effect,
+                Effect = EffectTestHelpers.AsEffect(effect),
                 Content = "Deploy Emergency Patch"
             };
 
@@ -2723,7 +2730,7 @@ public sealed class EffectorRuntimeBehaviorTests
                 Width = 200,
                 Height = 100,
                 Background = Brushes.White,
-                Effect = effect
+                Effect = EffectTestHelpers.AsEffect(effect)
             };
 
             var canvas = new Canvas();
@@ -2759,7 +2766,7 @@ public sealed class EffectorRuntimeBehaviorTests
             {
                 Width = 300,
                 Height = 200,
-                Effect = effect
+                Effect = EffectTestHelpers.AsEffect(effect)
             };
 
             var content = new Border
@@ -3043,12 +3050,12 @@ public sealed class EffectorRuntimeBehaviorTests
         return (T)field!.GetValue(null)!;
     }
 
-    private static Rect GetStoredHostBounds(IEffect effect)
+    private static Rect GetStoredHostBounds(object effect)
     {
         var tryGetBoundsMethod = typeof(EffectorRuntime).GetMethod(
             "TryGetHostVisualBounds",
             BindingFlags.Static | BindingFlags.NonPublic)!;
-        var args = new object?[] { effect, null };
+        var args = new object?[] { EffectTestHelpers.AsEffect(effect), null };
         var success = (bool)tryGetBoundsMethod.Invoke(null, args)!;
 
         Assert.True(success);
@@ -3075,7 +3082,7 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     private static EffectorShaderEffectFrame CreateTestCaptureFrame(
-        IEffect effect,
+        object effect,
         SKCanvas previousCanvas,
         SKSurface previousSurface,
         SKSurface surface,
@@ -3088,7 +3095,7 @@ public sealed class EffectorRuntimeBehaviorTests
             (int)effectBounds.Bottom);
 
         return new EffectorShaderEffectFrame(
-            effect,
+            EffectTestHelpers.AsEffect(effect),
             previousCanvas,
             previousSurface,
             surface,

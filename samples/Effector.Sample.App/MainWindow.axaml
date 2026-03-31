@@ -173,20 +173,17 @@
                 BorderBrush="#22003845"
                 BorderThickness="1">
           <StackPanel Spacing="14">
-            <TextBlock Text="Inline XAML Object Element"
+            <TextBlock Text="Runtime XAML Object Element"
                        FontSize="22"
                        FontWeight="SemiBold"
                        Foreground="#1E2A2D" />
-            <TextBlock Text="This card declares FilterEffect directly from the default Avalonia namespace, so consumers do not need a dedicated xmlns prefix for filter effects."
+            <TextBlock Text="This card parses FilterEffect from runtime XAML using the default Avalonia namespace, so consumers still do not need a dedicated xmlns prefix for filter effects."
                        Foreground="#55666B"
                        TextWrapping="Wrap" />
             <Border x:Name="InlineFilterEffectBorder"
                     CornerRadius="20"
                     Padding="18"
                     Background="#FFF4FBFE">
-              <Border.Effect>
-                <FilterEffect Padding="24" />
-              </Border.Effect>
               <Grid RowDefinitions="Auto,Auto,Auto"
                     RowSpacing="12">
                 <TextBlock Text="No prefix required"
@@ -194,7 +191,7 @@
                            FontWeight="SemiBold"
                            Foreground="#243033" />
                 <TextBlock Grid.Row="1"
-                           Text="The FilterEffect object is created from the default xmlns. The sample assigns its immutable primitive graph from code-behind."
+                           Text="The FilterEffect instance is parsed from runtime XAML in the default xmlns. The sample assigns its immutable primitive graph from code-behind."
                            Foreground="#55666B"
                            TextWrapping="Wrap" />
                 <StackPanel Grid.Row="2"

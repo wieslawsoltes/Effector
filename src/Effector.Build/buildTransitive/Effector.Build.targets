@@ -24,12 +24,12 @@
              Targets="Restore"
              BuildInParallel="false"
              RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild"
-             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;EffectorSkipCustomTargets=true;GenerateAssemblyInfo=false;GenerateTargetFrameworkAttribute=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false;BaseIntermediateOutputPath=$(_EffectorLocalRuntimeRefObjPath);MSBuildProjectExtensionsPath=$(_EffectorLocalRuntimeRefObjPath)" />
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;GenerateAssemblyInfo=false;GenerateTargetFrameworkAttribute=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false;BaseIntermediateOutputPath=$(_EffectorLocalRuntimeRefObjPath);MSBuildProjectExtensionsPath=$(_EffectorLocalRuntimeRefObjPath)" />
     <MSBuild Projects="$(_EffectorLocalRuntimeProjectPath)"
              Targets="Build"
              BuildInParallel="false"
              RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild"
-             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;EffectorSkipCustomTargets=true;GenerateAssemblyInfo=false;GenerateTargetFrameworkAttribute=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false;BaseIntermediateOutputPath=$(_EffectorLocalRuntimeRefObjPath);MSBuildProjectExtensionsPath=$(_EffectorLocalRuntimeRefObjPath)" />
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;GenerateAssemblyInfo=false;GenerateTargetFrameworkAttribute=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false;BaseIntermediateOutputPath=$(_EffectorLocalRuntimeRefObjPath);MSBuildProjectExtensionsPath=$(_EffectorLocalRuntimeRefObjPath)" />
   </Target>
 
   <Target Name="Effector_BuildLocalTask"

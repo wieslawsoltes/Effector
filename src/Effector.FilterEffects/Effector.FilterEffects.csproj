@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
+    <TargetFramework Condition="'$(PublishAot)' == 'true'">net8.0</TargetFramework>
+    <TargetFrameworks Condition="'$(PublishAot)' != 'true' and '$(TargetFramework)' == ''">net8.0;netstandard2.0</TargetFrameworks>
     <AssemblyName>Effector.FilterEffects</AssemblyName>
     <PackageId>Effector.FilterEffects</PackageId>
     <Title>Effector.FilterEffects</Title>
     <Description>SVG-inspired filter effect graph primitives for Effector.</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild Condition="'$(PublishAot)' == 'true'">false</GeneratePackageOnBuild>
     <IsPackable>true</IsPackable>
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
   </PropertyGroup>

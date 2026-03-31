@@ -14,7 +14,7 @@ public sealed class FilterEffectBehaviorTests
     [Fact]
     public void FilterEffect_IsAssignableTo_IEffect()
     {
-        Assert.IsAssignableFrom<IEffect>(new FilterEffect());
+        Assert.IsAssignableFrom<IEffect>(EffectTestHelpers.AsEffect(new FilterEffect()));
     }
 
     [Fact]
@@ -26,7 +26,7 @@ public sealed class FilterEffectBehaviorTests
             Primitives = CreateDropShadowLikeGraph()
         };
 
-        var immutable = EffectExtensions.ToImmutable(effect);
+        var immutable = EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(effect));
 
         Assert.NotNull(immutable);
         Assert.NotSame(effect, immutable);
@@ -44,7 +44,7 @@ public sealed class FilterEffectBehaviorTests
 
         var context = new SkiaEffectContext(1d, usesOpacitySaveLayer: false, new Rect(0d, 0d, 120d, 80d));
 
-        Assert.True(EffectorRuntime.TryCreateFilter(effect, context, out var createdFilter));
+        Assert.True(EffectorRuntime.TryCreateFilter(EffectTestHelpers.AsEffect(effect), context, out var createdFilter));
         Assert.NotNull(createdFilter);
 
         using var filter = createdFilter;
@@ -60,10 +60,10 @@ public sealed class FilterEffectBehaviorTests
             Primitives = CreateDropShadowLikeGraph()
         };
 
-        var immutable = EffectExtensions.ToImmutable(effect);
+        var immutable = EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(effect));
         var context = new SkiaEffectContext(1d, usesOpacitySaveLayer: false, new Rect(0d, 0d, 120d, 80d));
 
-        Assert.True(EffectorRuntime.TryCreateFilter((IEffect)immutable, context, out var createdFilter));
+        Assert.True(EffectorRuntime.TryCreateFilter(immutable, context, out var createdFilter));
         Assert.NotNull(createdFilter);
 
         using var filter = createdFilter;
@@ -103,7 +103,7 @@ public sealed class FilterEffectBehaviorTests
 
         var context = new SkiaEffectContext(1d, usesOpacitySaveLayer: false, new Rect(0d, 0d, 120d, 80d));
 
-        Assert.True(EffectorRuntime.TryCreateFilter(effect, context, out var createdFilter));
+        Assert.True(EffectorRuntime.TryCreateFilter(EffectTestHelpers.AsEffect(effect), context, out var createdFilter));
         Assert.Null(createdFilter);
     }
 

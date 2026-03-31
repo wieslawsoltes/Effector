@@ -782,7 +782,7 @@ public sealed class FilterEffectCoverageTests
             contentWidth + (padding * 2),
             contentHeight + (padding * 2));
 
-        using var filter = EffectorRuntime.CreateEffectPatched(effect, 1d, useOpacitySaveLayer: false, renderBounds);
+        using var filter = EffectorRuntime.CreateEffectPatched(EffectTestHelpers.AsEffect(effect), 1d, useOpacitySaveLayer: false, renderBounds);
         Assert.NotNull(filter);
 
         using var effected = ApplyEffectFilterViaSceneSaveLayer(
@@ -826,7 +826,7 @@ public sealed class FilterEffectCoverageTests
             contentWidth + (padding * 2),
             contentHeight + (padding * 2));
 
-        using var filter = EffectorRuntime.CreateEffectPatched(effect, 1d, useOpacitySaveLayer: false, renderBounds);
+        using var filter = EffectorRuntime.CreateEffectPatched(EffectTestHelpers.AsEffect(effect), 1d, useOpacitySaveLayer: false, renderBounds);
         Assert.NotNull(filter);
 
         using var effected = ApplyEffectFilterViaSceneSaveLayer(
@@ -1268,7 +1268,7 @@ public sealed class FilterEffectCoverageTests
         return skBitmap!;
     }
 
-    private static Border CreateTranslatedEffectHost(IEffect effect)
+    private static Border CreateTranslatedEffectHost(object effect)
     {
         var accent = new Border
         {
@@ -1295,7 +1295,7 @@ public sealed class FilterEffectCoverageTests
             Width = 220d,
             Height = 140d,
             Background = new SolidColorBrush(Color.Parse("#FFFF00FF")),
-            Effect = effect,
+            Effect = EffectTestHelpers.AsEffect(effect),
             Child = new Canvas
             {
                 Width = 220d,
@@ -1448,7 +1448,7 @@ public sealed class FilterEffectCoverageTests
                     };
                     var context = new SkiaEffectContext(1d, usesOpacitySaveLayer: false, inputBounds);
 
-                    Assert.True(EffectorRuntime.TryCreateFilter(effect, context, out var filter));
+                    Assert.True(EffectorRuntime.TryCreateFilter(EffectTestHelpers.AsEffect(effect), context, out var filter));
                     Assert.NotNull(filter);
                     return filter!;
                 },

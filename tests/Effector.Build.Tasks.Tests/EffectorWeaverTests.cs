@@ -147,6 +147,16 @@ public sealed class EffectorWeaverTests
     }
 
     [Fact]
+    public void BuildTasksRuntimeDependency_RewritesSkiaEffectBaseContract()
+    {
+        using var assembly = AssemblyDefinition.ReadAssembly(GetBuildTasksRuntimePath());
+        var skiaEffectBase = assembly.MainModule.Types.Single(static type => type.FullName == "Effector.SkiaEffectBase");
+
+        Assert.Equal(typeof(Effect).FullName, skiaEffectBase.BaseType?.FullName);
+        Assert.Contains(skiaEffectBase.Interfaces, static candidate => candidate.InterfaceType.FullName == typeof(IEffect).FullName);
+    }
+
+    [Fact]
     public void Weaver_RejectsFactories_WithoutValueSnapshotSupport()
     {
         var assemblyPath = BuildTemporaryAssembly(
@@ -391,6 +401,9 @@ public sealed class EffectorWeaverTests
 
     private static string GetEffectorRuntimePath() =>
         typeof(SkiaEffectBase).Assembly.Location;
+
+    private static string GetBuildTasksRuntimePath() =>
+        Path.Combine(Path.GetDirectoryName(typeof(EffectorWeaver).Assembly.Location)!, "Effector.dll");
 
     private static string GetAvaloniaBasePath() =>
         typeof(Effect).Assembly.Location;

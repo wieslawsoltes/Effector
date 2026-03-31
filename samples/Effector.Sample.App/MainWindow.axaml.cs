@@ -205,9 +205,34 @@ public partial class MainWindow : Window
     {
         var target = this.GetVisualDescendants()
             .OfType<Grid>()
-            .FirstOrDefault(static grid => grid.Effect is ScanlineShaderEffect or GridShaderEffect or SpotlightShaderEffect);
+            .FirstOrDefault(static grid => HasEffectType(
+                grid.Effect,
+                typeof(ScanlineShaderEffect),
+                typeof(GridShaderEffect),
+                typeof(SpotlightShaderEffect)));
         target?.BringIntoView();
     }
+
+    private static bool HasEffectType(object? effect, params Type[] effectTypes)
+    {
+        var effectType = effect?.GetType();
+        if (effectType is null)
+        {
+            return false;
+        }
+
+        foreach (var candidateType in effectTypes)
+        {
+            if (effectType == candidateType)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IEffect? AsAvaloniaEffect(object? effect) => effect as IEffect;
 
     private static bool IsEnvironmentSwitchEnabled(string variableName)
     {
@@ -1018,7 +1043,7 @@ public partial class MainWindow : Window
         return container;
     }
 
-    private Border CreatePreviewTile(string sectionName, string title, IEffect? effect, Func<IEffect?, Control>? buildPreviewContent = null)
+    private Border CreatePreviewTile(string sectionName, string title, object? effect, Func<object?, Control>? buildPreviewContent = null)
     {
         var outer = new Border
         {
@@ -1050,7 +1075,7 @@ public partial class MainWindow : Window
         return outer;
     }
 
-    private Control CreateDefaultPreviewContent(IEffect? effect)
+    private Control CreateDefaultPreviewContent(object? effect)
     {
         var preview = new Grid
         {
@@ -1069,9 +1094,9 @@ public partial class MainWindow : Window
         preview.Children.Add(BuildUiPanel().WithColumn(1));
         preview.RowDefinitions = new RowDefinitions("Auto");
 
-        if (effect is not null)
+        if (AsAvaloniaEffect(effect) is { } avaloniaEffect)
         {
-            preview.Effect = effect;
+            preview.Effect = avaloniaEffect;
         }
 
         return preview;
@@ -1173,7 +1198,7 @@ public partial class MainWindow : Window
         return root;
     }
 
-    private Control BuildBurningButtonPreview(IEffect? effect)
+    private Control BuildBurningButtonPreview(object? effect)
     {
         var root = new Grid
         {
@@ -1214,7 +1239,7 @@ public partial class MainWindow : Window
             BorderBrush = new SolidColorBrush(Color.Parse("#364148")),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(18),
-            Effect = effect,
+            Effect = AsAvaloniaEffect(effect),
             Content = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -1487,10 +1512,10 @@ public partial class MainWindow : Window
         public EffectSectionDefinition(
             string name,
             string description,
-            IEffect effect,
+            object effect,
             string xamlExample,
             Action<Panel> buildControls,
-            Func<IEffect?, Control>? buildPreviewContent = null)
+            Func<object?, Control>? buildPreviewContent = null)
         {
             Name = name;
             Description = description;
@@ -1504,13 +1529,13 @@ public partial class MainWindow : Window
 
         public string Description { get; }
 
-        public IEffect Effect { get; }
+        public object Effect { get; }
 
         public string XamlExample { get; }
 
         public Action<Panel> BuildControls { get; }
 
-        public Func<IEffect?, Control>? BuildPreviewContent { get; }
+        public Func<object?, Control>? BuildPreviewContent { get; }
     }
 
     private static double GetRelativeLuminance(Color color)

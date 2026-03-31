@@ -11,6 +11,7 @@
     <ProjectReference Include="..\..\src\Effector.FilterEffects\Effector.FilterEffects.csproj" />
     <ProjectReference Include="..\Effector.Sample.Effects\Effector.Sample.Effects.csproj" />
     <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Fonts.Inter" />
     <PackageReference Include="SkiaSharp.NativeAssets.macOS" />

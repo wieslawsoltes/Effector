@@ -123,7 +123,7 @@ jobs:
           mkdir -p artifacts/headless-screenshots
           AVALONIA_SCREENSHOT_DIR="${GITHUB_WORKSPACE}/artifacts/headless-screenshots" \
           DYLD_LIBRARY_PATH="${GITHUB_WORKSPACE}/tests/Effector.Runtime.Tests/bin/Release/net8.0/runtimes/osx/native" \
-          dotnet test tests/Effector.Runtime.Tests/Effector.Runtime.Tests.csproj -c Release --no-build --logger trx --results-directory artifacts/test/runtime
+          dotnet test tests/Effector.Runtime.Tests/Effector.Runtime.Tests.csproj -c Release --no-build --blame-crash --logger trx --results-directory artifacts/test/runtime
 
       - name: Upload runtime test results
         uses: actions/upload-artifact@v4

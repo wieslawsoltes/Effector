@@ -5,6 +5,7 @@
     <IsPackable>false</IsPackable>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <ImplicitUsings>false</ImplicitUsings>
+    <EffectorUseBuiltRuntimeReference Condition="'$(EffectorUseBuiltRuntimeReference)' == '' and '$(DesignTimeBuild)' != 'true'">true</EffectorUseBuiltRuntimeReference>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(EffectorUseBuiltRuntimeReference)' != 'true'">
@@ -13,6 +14,9 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(EffectorUseBuiltRuntimeReference)' == 'true'">
+    <ProjectReference Include="..\Effector\Effector.csproj"
+                      ReferenceOutputAssembly="false"
+                      AdditionalProperties="GeneratePackageOnBuild=false" />
     <Reference Include="Effector">
       <HintPath>..\Effector\bin\$(Configuration)\netstandard2.0\Effector.dll</HintPath>
       <Private>true</Private>

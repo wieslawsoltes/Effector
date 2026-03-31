@@ -17,7 +17,8 @@
     <_EffectorSelfWeaverDllPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.SelfWeaver\bin\$(Configuration)\net8.0\Effector.SelfWeaver.dll'))</_EffectorSelfWeaverDllPath>
     <_EffectorBuildTasksProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.Build.Tasks\Effector.Build.Tasks.csproj'))</_EffectorBuildTasksProjectPath>
     <_EffectorBuildTasksOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0'))</_EffectorBuildTasksOutputDir>
-    <_EffectorLocalRuntimeRefObjPath>$([System.IO.Path]::GetFullPath('$(BaseIntermediateOutputPath)effector-runtime-ref\'))</_EffectorLocalRuntimeRefObjPath>
+    <_EffectorLocalRuntimeRefObjPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)obj\effector-runtime-ref\'))</_EffectorLocalRuntimeRefObjPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin\**;obj\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,25 +33,25 @@
     <MSBuild Projects="$(_EffectorSelfWeaverProjectPath)"
              Targets="Restore"
              BuildInParallel="false"
-             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild"
+             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild;BaseIntermediateOutputPath;MSBuildProjectExtensionsPath;GenerateAssemblyInfo;GenerateTargetFrameworkAttribute"
              Properties="Configuration=$(Configuration);TargetFramework=net8.0;GeneratePackageOnBuild=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false" />
     <MSBuild Projects="$(_EffectorSelfWeaverProjectPath)"
              Targets="Build"
              BuildInParallel="false"
-             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild"
+             RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild;BaseIntermediateOutputPath;MSBuildProjectExtensionsPath;GenerateAssemblyInfo;GenerateTargetFrameworkAttribute"
              Properties="Configuration=$(Configuration);TargetFramework=net8.0;GeneratePackageOnBuild=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false" />
   </Target>
 
   <Target Name="Effector_SelfWeave"
-          AfterTargets="Build"
-          BeforeTargets="Pack"
+          AfterTargets="CoreCompile"
+          BeforeTargets="CopyFilesToOutputDirectory"
           DependsOnTargets="Effector_BuildSelfWeaver"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(EffectorSkipCustomTargets)' != 'true' and '$(TargetPath)' != ''">
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(EffectorSkipCustomTargets)' != 'true' and '@(IntermediateAssembly)' != ''">
     <Error Condition="!Exists('$(_EffectorSelfWeaverDllPath)')"
            Text="Effector self-weaver was not found at '$(_EffectorSelfWeaverDllPath)'." />
-    <Error Condition="!Exists('$(TargetPath)')"
-           Text="Effector target assembly was not found at '$(TargetPath)'." />
-    <Exec Command="dotnet &quot;$(_EffectorSelfWeaverDllPath)&quot; &quot;$(TargetPath)&quot;" />
+    <Error Condition="!Exists('%(IntermediateAssembly.FullPath)')"
+           Text="Effector intermediate assembly was not found at '%(IntermediateAssembly.FullPath)'." />
+    <Exec Command="dotnet &quot;$(_EffectorSelfWeaverDllPath)&quot; &quot;%(IntermediateAssembly.FullPath)&quot;" />
   </Target>
 
   <Target Name="Effector_BuildLocalRuntimeReference"
@@ -59,12 +60,12 @@
              Targets="Restore"
              BuildInParallel="false"
              RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild"
-             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;EffectorSkipCustomTargets=true;GenerateAssemblyInfo=false;GenerateTargetFrameworkAttribute=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false;BaseIntermediateOutputPath=$(_EffectorLocalRuntimeRefObjPath);MSBuildProjectExtensionsPath=$(_EffectorLocalRuntimeRefObjPath)" />
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;GenerateAssemblyInfo=false;GenerateTargetFrameworkAttribute=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false;BaseIntermediateOutputPath=$(_EffectorLocalRuntimeRefObjPath);MSBuildProjectExtensionsPath=$(_EffectorLocalRuntimeRefObjPath)" />
     <MSBuild Projects="$(MSBuildProjectFullPath)"
              Targets="Build"
              BuildInParallel="false"
              RemoveProperties="TargetFramework;TargetFrameworks;PublishAot;RuntimeIdentifier;SelfContained;PublishTrimmed;PublishSingleFile;PublishReadyToRun;NoBuild"
-             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;EffectorSkipCustomTargets=true;GenerateAssemblyInfo=false;GenerateTargetFrameworkAttribute=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false;BaseIntermediateOutputPath=$(_EffectorLocalRuntimeRefObjPath);MSBuildProjectExtensionsPath=$(_EffectorLocalRuntimeRefObjPath)" />
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0;GeneratePackageOnBuild=false;GenerateAssemblyInfo=false;GenerateTargetFrameworkAttribute=false;DesignTimeBuild=false;BuildingProject=false;NoBuild=false;BaseIntermediateOutputPath=$(_EffectorLocalRuntimeRefObjPath);MSBuildProjectExtensionsPath=$(_EffectorLocalRuntimeRefObjPath)" />
   </Target>
 
   <Target Name="Effector_BuildPackTaskProject"

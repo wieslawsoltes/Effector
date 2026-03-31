@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Effector.FilterEffects;
@@ -18,12 +19,28 @@ public partial class MainWindow
         var border = this.GetVisualDescendants()
             .OfType<Border>()
             .FirstOrDefault(static candidate => candidate.Name == "InlineFilterEffectBorder");
-        if (border is not { Effect: FilterEffect effect })
+        if (border is null)
+        {
+            return;
+        }
+
+        var parsedBorder = AvaloniaRuntimeXamlLoader.Parse<Border>(
+            """
+            <Border xmlns="https://github.com/avaloniaui">
+              <Border.Effect>
+                <FilterEffect Padding="24" />
+              </Border.Effect>
+            </Border>
+            """,
+            typeof(FilterEffect).Assembly);
+
+        if ((object?)parsedBorder.Effect is not FilterEffect effect)
         {
             return;
         }
 
         effect.Primitives = CreateInlineXamlPreviewGraph();
+        border.Effect = AsAvaloniaEffect(effect);
     }
 
     private IEnumerable<EffectSectionDefinition> CreateFilterEffectDefinitions()
@@ -442,7 +459,7 @@ public partial class MainWindow
                     stitchTiles: FilterStitchType.Stitch)),
             buildPreviewContent: BuildTurbulenceFilterPreview);
 
-    private Control BuildTileFilterPreview(IEffect? effect)
+    private Control BuildTileFilterPreview(object? effect)
     {
         var accent = new Border
         {
@@ -481,7 +498,7 @@ public partial class MainWindow
             Width = 220d,
             Height = 140d,
             Background = new SolidColorBrush(Color.Parse("#FFFF00FF")),
-            Effect = effect,
+            Effect = AsAvaloniaEffect(effect),
             Child = new Canvas
             {
                 Width = 220d,
@@ -496,7 +513,7 @@ public partial class MainWindow
         };
     }
 
-    private Control BuildFloodFilterPreview(IEffect? effect)
+    private Control BuildFloodFilterPreview(object? effect)
     {
         var title = new TextBlock
         {
@@ -545,7 +562,7 @@ public partial class MainWindow
             CornerRadius = new CornerRadius(18d),
             ClipToBounds = true,
             Background = new SolidColorBrush(Color.Parse("#FFF3E7C5")),
-            Effect = effect,
+            Effect = AsAvaloniaEffect(effect),
             Child = new Canvas
             {
                 Width = 320d,
@@ -561,8 +578,9 @@ public partial class MainWindow
         };
     }
 
-    private Control BuildTurbulenceFilterPreview(IEffect? effect)
+    private Control BuildTurbulenceFilterPreview(object? effect)
     {
+        var avaloniaEffect = AsAvaloniaEffect(effect);
         var host = new Border
         {
             Width = 320d,
@@ -570,10 +588,10 @@ public partial class MainWindow
             CornerRadius = new CornerRadius(18d),
             ClipToBounds = true,
             Background = new SolidColorBrush(Color.Parse("#FFF4E8BF")),
-            Effect = effect
+            Effect = avaloniaEffect
         };
 
-        if (effect is not null)
+        if (avaloniaEffect is not null)
         {
             return host;
         }
@@ -622,7 +640,7 @@ public partial class MainWindow
         string codeExample,
         FilterPrimitiveCollection primitives,
         double padding = 24d,
-        Func<IEffect?, Control>? buildPreviewContent = null)
+        Func<object?, Control>? buildPreviewContent = null)
     {
         var effect = new FilterEffect
         {
