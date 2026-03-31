@@ -1752,11 +1752,17 @@ public static class EffectorRuntime
                         frame.UsedRenderThreadBounds,
                         frame.IntermediateSurfaceBounds));
             }
+            var overlayContentBounds = contentBounds.IsEmpty ? frame.LocalEffectBounds : contentBounds;
+            var normalizedOverlayBounds = NormalizeRectToOrigin(overlayContentBounds);
+            var overlayDestinationBounds = OffsetRect(
+                normalizedOverlayBounds,
+                frame.IntermediateSurfaceBounds.Left + overlayContentBounds.Left,
+                frame.IntermediateSurfaceBounds.Top + overlayContentBounds.Top);
             var shaderContext = new SkiaShaderEffectContext(
                 frame.EffectContext,
                 snapshot,
                 SKRect.Create(snapshot.Width, snapshot.Height),
-                contentBounds.IsEmpty ? frame.LocalEffectBounds : contentBounds);
+                normalizedOverlayBounds);
 
             using var shaderEffect = TryCreateShaderEffect(frame.Effect, shaderContext, out var created)
                 ? created
@@ -1779,9 +1785,10 @@ public static class EffectorRuntime
                         frame.PreviousCanvas,
                         snapshot,
                         shaderEffect,
-                        contentBounds.IsEmpty ? frame.LocalEffectBounds : contentBounds,
-                        frame.LocalEffectBounds,
-                        frame.DeviceEffectBounds);
+                        normalizedOverlayBounds,
+                        normalizedOverlayBounds,
+                        overlayDestinationBounds,
+                        new SKPoint(-overlayContentBounds.Left, -overlayContentBounds.Top));
                     TraceShaderPhase(frame.Effect, "end:overlay-done");
                 }
             }
@@ -2417,7 +2424,8 @@ public static class EffectorRuntime
         SkiaShaderEffect shaderEffect,
         SKRect contentBounds,
         SKRect effectBounds,
-        SKRect destinationOriginBounds)
+        SKRect destinationOriginBounds,
+        SKPoint snapshotLocalOffset)
     {
         var destinationRect = Intersect(shaderEffect.DestinationRect ?? contentBounds, effectBounds);
         destinationRect = Intersect(destinationRect, contentBounds);
@@ -2459,7 +2467,7 @@ public static class EffectorRuntime
                 }
 
                 using var maskPaint = new SKPaint { BlendMode = SKBlendMode.DstIn };
-                canvas.DrawImage(snapshot, 0, 0, maskPaint);
+                canvas.DrawImage(snapshot, snapshotLocalOffset.X, snapshotLocalOffset.Y, maskPaint);
             }
             finally
             {
@@ -2471,6 +2479,9 @@ public static class EffectorRuntime
             canvas.RestoreToCount(restoreCount);
         }
     }
+
+    private static SKRect NormalizeRectToOrigin(SKRect rect) =>
+        new(0f, 0f, Math.Max(0f, rect.Width), Math.Max(0f, rect.Height));
 
     private static void TraceShaderFrame(
         IEffect effect,

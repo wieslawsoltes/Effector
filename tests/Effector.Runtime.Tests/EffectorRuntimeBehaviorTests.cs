@@ -57,6 +57,11 @@ public sealed class EffectorRuntimeBehaviorTests
         }
     }
 
+    private sealed class FakeRuntimeShaderDrawingContext
+    {
+        public object GrContext = new();
+    }
+
     private static void RunOnUiThread(Action action)
     {
         Session.Dispatch(action, CancellationToken.None).GetAwaiter().GetResult();
@@ -795,6 +800,49 @@ public sealed class EffectorRuntimeBehaviorTests
         AssertColorClose(runtime.GetPixel(18, 18), fallback.GetPixel(18, 18), tolerance: 4);
         AssertColorClose(runtime.GetPixel(12, 18), fallback.GetPixel(12, 18), tolerance: 8);
         AssertColorClose(runtime.GetPixel(18, 12), fallback.GetPixel(18, 12), tolerance: 8);
+    }
+
+    [Fact]
+    public void DrawMaskedShaderOverlay_RuntimeShader_Compensates_For_TranslatedCanvasOrigin()
+    {
+        if (!EffectorRuntime.DirectRuntimeShadersEnabled)
+        {
+            return;
+        }
+
+        const string shaderSource =
+            """
+            half4 main(float2 coord) {
+                if (coord.x < 4.0 && coord.y < 4.0) {
+                    return half4(1.0, 0.0, 0.0, 1.0);
+                }
+
+                return half4(0.0, 1.0, 0.0, 1.0);
+            }
+            """;
+
+        using var snapshot = CreateOpaqueMaskSnapshot(16, 16);
+        var context = new SkiaShaderEffectContext(
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            snapshot,
+            new SKRect(0, 0, 16, 16),
+            new SKRect(0, 0, 8, 8));
+
+        using var shaderEffect = SkiaRuntimeShaderBuilder.Create(shaderSource, context);
+
+        Assert.NotNull(shaderEffect.Shader);
+
+        using var output = RenderTranslatedRuntimeShaderOverlay(
+            snapshot,
+            shaderEffect,
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(44, 15, 52, 23),
+            new SKPoint(-4, -3));
+
+        Assert.Equal(0, output.GetPixel(43, 15).Alpha);
+        AssertColorClose(output.GetPixel(44, 15), new SKColor(255, 0, 0, 255), tolerance: 4);
+        AssertColorClose(output.GetPixel(51, 22), new SKColor(0, 255, 0, 255), tolerance: 4);
     }
 
     [Fact]
@@ -2329,6 +2377,73 @@ public sealed class EffectorRuntimeBehaviorTests
         using var image = surface.Snapshot();
         image.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0);
         return bitmap;
+    }
+
+    private static SKBitmap RenderTranslatedRuntimeShaderOverlay(
+        SKImage snapshot,
+        SkiaShaderEffect shaderEffect,
+        SKRect contentBounds,
+        SKRect effectBounds,
+        SKRect destinationOriginBounds,
+        SKPoint snapshotLocalOffset)
+    {
+        var bitmap = new SKBitmap(96, 64);
+
+        using var surface = SKSurface.Create(new SKImageInfo(bitmap.Width, bitmap.Height));
+        Assert.NotNull(surface);
+
+        var drawMethod = typeof(EffectorRuntime).GetMethod(
+            "DrawMaskedShaderOverlay",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(drawMethod);
+
+        var grContextFieldHolder = typeof(EffectorRuntime).GetField(
+            "s_skiaGrContextField",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(grContextFieldHolder);
+
+        var fakeGrContextField = typeof(FakeRuntimeShaderDrawingContext).GetField(nameof(FakeRuntimeShaderDrawingContext.GrContext));
+        Assert.NotNull(fakeGrContextField);
+
+        var originalGrContextField = (FieldInfo?)grContextFieldHolder!.GetValue(null);
+        try
+        {
+            grContextFieldHolder.SetValue(null, fakeGrContextField);
+
+            var canvas = surface!.Canvas;
+            canvas.Clear(SKColors.Transparent);
+
+            drawMethod!.Invoke(null, new object[]
+            {
+                new FakeRuntimeShaderDrawingContext(),
+                canvas,
+                snapshot,
+                shaderEffect,
+                contentBounds,
+                effectBounds,
+                destinationOriginBounds,
+                snapshotLocalOffset
+            });
+
+            canvas.Flush();
+            using var image = surface.Snapshot();
+            image.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0);
+            return bitmap;
+        }
+        finally
+        {
+            grContextFieldHolder.SetValue(null, originalGrContextField);
+        }
+    }
+
+    private static SKImage CreateOpaqueMaskSnapshot(int width, int height)
+    {
+        using var surface = SKSurface.Create(new SKImageInfo(width, height));
+        Assert.NotNull(surface);
+
+        surface!.Canvas.Clear(SKColors.White);
+        surface!.Canvas.Flush();
+        return surface.Snapshot();
     }
 
     private static void AssertColorClose(SKColor actual, SKColor expected, int tolerance)
