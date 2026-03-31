@@ -6,6 +6,7 @@
   <Folder Name="/src/">
     <Project Path="src/Effector.Build.Tasks/Effector.Build.Tasks.csproj" />
     <Project Path="src/Effector/Effector.csproj" />
+    <Project Path="src/Effector.FilterEffects/Effector.FilterEffects.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Effector.Build.Tasks.Tests/Effector.Build.Tasks.Tests.csproj" />

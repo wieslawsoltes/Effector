@@ -11,6 +11,7 @@ Effector brings extensible Skia-backed custom effects to Avalonia `11.3.12` whil
 | Package | Version | Downloads |
 | --- | --- | --- |
 | `Effector` | [![NuGet](https://img.shields.io/nuget/v/Effector.svg?label=NuGet)](https://www.nuget.org/packages/Effector/) | [![NuGet downloads](https://img.shields.io/nuget/dt/Effector.svg?label=Downloads)](https://www.nuget.org/packages/Effector/) |
+| `Effector.FilterEffects` | companion package built from this repo | n/a |
 
 ## Highlights
 
@@ -63,6 +64,36 @@ Or:
 ```
 
 No theme include is required. Effector extends the effect pipeline rather than introducing visual styles.
+
+## SVG Filter Effects
+
+The SVG-inspired filter graph API lives in the separate `Effector.FilterEffects` package so the core `Effector` runtime stays focused on the base `IEffect` weaving and patched Avalonia integration layer.
+
+`Effector.FilterEffects` should reference `Effector` as a normal dependency, not with `PrivateAssets`, because consumers need both the public `SkiaEffectBase` surface and the transitive build targets that weave and patch the Avalonia effect pipeline.
+
+```csharp
+using Avalonia;
+using Avalonia.Media;
+using Effector.FilterEffects;
+
+var effect = new FilterEffect
+{
+    Padding = new Thickness(24),
+    Primitives = new FilterPrimitiveCollection(
+        new GaussianBlurPrimitive(stdDeviationX: 4, result: "blur"),
+        new OffsetPrimitive(dx: 6, dy: 4, input: FilterInput.Named("blur"), result: "offset"),
+        new FloodPrimitive(Color.Parse("#99000000"), opacity: 0.85, result: "flood"),
+        new CompositePrimitive(
+            FilterCompositeOperator.In,
+            input: FilterInput.Named("flood"),
+            input2: FilterInput.Named("offset"),
+            result: "shadow"),
+        new MergePrimitive(
+            new FilterInputCollection(
+                FilterInput.Named("shadow"),
+                FilterInput.SourceGraphic)))
+};
+```
 
 ## Quick Start
 

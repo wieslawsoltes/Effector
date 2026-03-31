@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
+    <AssemblyName>Effector.FilterEffects</AssemblyName>
+    <PackageId>Effector.FilterEffects</PackageId>
+    <Title>Effector.FilterEffects</Title>
+    <Description>SVG-inspired filter effect graph primitives for Effector.</Description>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Effector\Effector.csproj" />
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <Import Project="..\Effector.Build\buildTransitive\Effector.Build.props" />
+  <Import Project="..\Effector.Build\buildTransitive\Effector.Build.targets" />
+</Project>

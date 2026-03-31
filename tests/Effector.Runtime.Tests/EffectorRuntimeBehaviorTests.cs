@@ -14,6 +14,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using Effector.FilterEffects;
 using Effector.Sample.App;
 using Effector.Sample.Effects;
 using SkiaSharp;
@@ -279,6 +280,62 @@ public sealed class EffectorRuntimeBehaviorTests
         Assert.True(result.shouldPrefer);
         Assert.Equal(120d, result.size.Width, 3);
         Assert.Equal(80d, result.size.Height, 3);
+    }
+
+    [Fact]
+    public void CreateEffectContext_Prefers_RenderThreadEffectBounds_For_FilterEffects()
+    {
+        RunOnUiThread(() =>
+        {
+            var effect = new FilterEffect
+            {
+                Padding = new Thickness(24d),
+                Primitives = new FilterPrimitiveCollection(
+                    new FloodPrimitive(Color.Parse("#0A84FF"), opacity: 0.86d))
+            };
+
+            var renderBounds = new Rect(140d, 92d, 368d, 268d);
+            var createContextMethod = typeof(EffectorRuntime).GetMethod(
+                "CreateEffectContext",
+                BindingFlags.Static | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { typeof(IEffect), typeof(double), typeof(bool), typeof(Rect?) },
+                modifiers: null)!;
+
+            var context = (SkiaEffectContext)createContextMethod.Invoke(
+                null,
+                new object?[] { effect, 1d, false, renderBounds })!;
+
+            Assert.Equal(new Rect(0d, 0d, 320d, 220d), context.InputBounds);
+            Assert.Equal(new Rect(164d, 116d, 320d, 220d), context.SceneBounds);
+        });
+    }
+
+    [Fact]
+    public void RecordRenderThreadEffect_Caches_Bounds_For_FilterEffects()
+    {
+        RunOnUiThread(() =>
+        {
+            var effect = new FilterEffect
+            {
+                Padding = new Thickness(24d),
+                Primitives = new FilterPrimitiveCollection(
+                    new FloodPrimitive(Color.Parse("#0A84FF"), opacity: 0.86d))
+            };
+
+            var bounds = new Rect(140d, 92d, 368d, 268d);
+            EffectorRuntime.RecordRenderThreadEffect(effect, new object(), bounds, new Border());
+
+            var takeBoundsMethod = typeof(EffectorRuntime).GetMethod(
+                "TakeRenderThreadEffectBounds",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var args = new object?[] { effect, null };
+
+            var hasBounds = (bool)takeBoundsMethod.Invoke(null, args)!;
+
+            Assert.True(hasBounds);
+            Assert.Equal(bounds, Assert.IsType<Rect>(args[1]));
+        });
     }
 
     [Fact]
