@@ -875,11 +875,11 @@ public sealed class FilterEffectCoverageTests
         const int renderY = 91;
         const int padding = 24;
 
-        var effect = new FilterEffect
+        var effect = RunOnUiThread(() => EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(new FilterEffect
         {
             Padding = new Thickness(padding),
             Primitives = primitives
-        };
+        })));
 
         var renderBounds = new Rect(
             renderX,
@@ -887,7 +887,7 @@ public sealed class FilterEffectCoverageTests
             contentWidth + (padding * 2),
             contentHeight + (padding * 2));
 
-        using var filter = EffectorRuntime.CreateEffectPatched(EffectTestHelpers.AsEffect(effect), 1d, useOpacitySaveLayer: false, renderBounds);
+        using var filter = EffectorRuntime.CreateEffectPatched(effect, 1d, useOpacitySaveLayer: false, renderBounds);
         Assert.NotNull(filter);
 
         using var effected = ApplyEffectFilterViaSceneSaveLayer(
@@ -914,7 +914,7 @@ public sealed class FilterEffectCoverageTests
         const int renderY = 91;
         const int padding = 24;
 
-        var effect = new FilterEffect
+        var effect = RunOnUiThread(() => EffectExtensions.ToImmutable(EffectTestHelpers.AsEffect(new FilterEffect
         {
             Padding = new Thickness(padding),
             Primitives = new FilterPrimitiveCollection(
@@ -923,7 +923,7 @@ public sealed class FilterEffectCoverageTests
                     FilterCompositeOperator.In,
                     input: FilterInput.Named("paint"),
                     input2: FilterInput.SourceAlpha))
-        };
+        })));
 
         var renderBounds = new Rect(
             renderX,
@@ -931,7 +931,7 @@ public sealed class FilterEffectCoverageTests
             contentWidth + (padding * 2),
             contentHeight + (padding * 2));
 
-        using var filter = EffectorRuntime.CreateEffectPatched(EffectTestHelpers.AsEffect(effect), 1d, useOpacitySaveLayer: false, renderBounds);
+        using var filter = EffectorRuntime.CreateEffectPatched(effect, 1d, useOpacitySaveLayer: false, renderBounds);
         Assert.NotNull(filter);
 
         using var effected = ApplyEffectFilterViaSceneSaveLayer(
@@ -1558,6 +1558,11 @@ public sealed class FilterEffectCoverageTests
                     return filter!;
                 },
                 CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+    private static TResult RunOnUiThread<TResult>(Func<TResult> action) =>
+        Session.Dispatch(action, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
 
