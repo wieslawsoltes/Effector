@@ -537,7 +537,13 @@ public static class EffectorRuntime
 
         var currentOpacity = Convert.ToDouble(s_skiaCurrentOpacityField.GetValue(drawingContext));
         var useOpacitySaveLayer = Convert.ToBoolean(s_skiaUseOpacitySaveLayerField.GetValue(drawingContext)!);
-        return CreateEffectPatched(effect, currentOpacity, useOpacitySaveLayer, effectClipRect);
+        var hasRenderThreadBounds = TakeRenderThreadEffectBounds(effect, out var renderThreadBounds);
+        return CreateEffectPatched(
+            effect,
+            currentOpacity,
+            useOpacitySaveLayer,
+            effectClipRect,
+            hasRenderThreadBounds ? renderThreadBounds : effectClipRect);
     }
 
     public static SKImageFilter? CreateEffectPatched(IEffect effect, double currentOpacity, bool useOpacitySaveLayer)
@@ -549,10 +555,21 @@ public static class EffectorRuntime
             effect,
             currentOpacity,
             useOpacitySaveLayer,
+            hasRenderThreadBounds ? renderThreadBounds : null,
             hasRenderThreadBounds ? renderThreadBounds : null);
     }
 
     public static SKImageFilter? CreateEffectPatched(IEffect effect, double currentOpacity, bool useOpacitySaveLayer, Rect? renderThreadBounds)
+    {
+        return CreateEffectPatched(effect, currentOpacity, useOpacitySaveLayer, renderThreadBounds, generatedSourceBounds: null);
+    }
+
+    private static SKImageFilter? CreateEffectPatched(
+        IEffect effect,
+        double currentOpacity,
+        bool useOpacitySaveLayer,
+        Rect? effectClipRect,
+        Rect? generatedSourceBounds)
     {
         _ = effect ?? throw new ArgumentNullException(nameof(effect));
 
@@ -560,7 +577,8 @@ public static class EffectorRuntime
             effect,
             currentOpacity,
             useOpacitySaveLayer,
-            renderThreadBounds);
+            effectClipRect,
+            generatedSourceBounds);
         if (TryCreateFilter(effect, context, out var customFilter))
         {
             return customFilter;
@@ -1669,14 +1687,25 @@ public static class EffectorRuntime
         bool useOpacitySaveLayer,
         Rect? renderThreadBounds)
     {
+        return CreateEffectContext(effect, currentOpacity, useOpacitySaveLayer, renderThreadBounds, generatedSourceBounds: null);
+    }
+
+    private static SkiaEffectContext CreateEffectContext(
+        IEffect? effect,
+        double currentOpacity,
+        bool useOpacitySaveLayer,
+        Rect? effectClipRect,
+        Rect? generatedSourceBounds)
+    {
         if (effect is not null)
         {
-            if (renderThreadBounds is { } renderBounds &&
+            if (effectClipRect is { } renderBounds &&
                 TryCreateContextFromRenderThreadBounds(
                     effect,
                     currentOpacity,
                     useOpacitySaveLayer,
                     renderBounds,
+                    generatedSourceBounds,
                     out var renderThreadContext))
             {
                 return renderThreadContext;
@@ -1702,21 +1731,38 @@ public static class EffectorRuntime
         double currentOpacity,
         bool useOpacitySaveLayer,
         Rect renderBounds,
+        Rect? generatedSourceBounds,
         out SkiaEffectContext context)
     {
         var padding = GetEffectPadding(effect);
-        var contentBounds = Deflate(renderBounds, padding);
-        if (contentBounds.Width <= 0d || contentBounds.Height <= 0d)
+        var sceneContentBounds = Deflate(renderBounds, padding);
+        if (sceneContentBounds.Width <= 0d || sceneContentBounds.Height <= 0d)
         {
             context = default;
             return false;
         }
 
+        var inputBounds = TryResolveLocalInputBounds(effect, out var stableInputBounds)
+            ? stableInputBounds
+            : new Rect(default, sceneContentBounds.Size);
+        var generatedBounds = generatedSourceBounds is { } rawGeneratedBounds
+            ? Deflate(rawGeneratedBounds, padding)
+            : TryResolveSceneInputBounds(effect, out var stableSceneBounds)
+                ? stableSceneBounds
+                : sceneContentBounds;
+        if (generatedBounds.Width <= 0d || generatedBounds.Height <= 0d)
+        {
+            generatedBounds = sceneContentBounds;
+        }
+
         context = new SkiaEffectContext(
             effectiveOpacity: currentOpacity,
             usesOpacitySaveLayer: useOpacitySaveLayer,
-            inputBounds: new Rect(default, contentBounds.Size),
-            sceneBounds: contentBounds);
+            inputBounds: inputBounds,
+            sceneBounds: sceneContentBounds,
+            generatedSourceBounds: generatedBounds,
+            sourceImage: null,
+            sourceImageBounds: default);
         return true;
     }
 
@@ -1928,6 +1974,38 @@ public static class EffectorRuntime
         return descriptor.RequiresSourceCaptureOverride?.Invoke(effect) ?? true;
     }
 
+    private static bool PrefersUnclippedHostBounds(IEffect effect)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+
+        var effectType = effect.GetType();
+        var primitivesProperty = effectType.GetProperty("Primitives", BindingFlags.Instance | BindingFlags.Public);
+        if (primitivesProperty is null)
+        {
+            return false;
+        }
+
+        var primitives = primitivesProperty.GetValue(effect);
+        if (primitives is null)
+        {
+            return false;
+        }
+
+        var builderType = effectType.Assembly.GetType("Effector.FilterEffects.FilterEffectBuilder", throwOnError: false);
+        var prefersMethod = builderType?.GetMethod(
+            "PrefersUnclippedHostBounds",
+            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { primitives.GetType() },
+            modifiers: null);
+        if (prefersMethod is null)
+        {
+            return false;
+        }
+
+        return prefersMethod.Invoke(null, new[] { primitives }) as bool? ?? false;
+    }
+
     private static bool TryCreateCaptureFrame(object drawingContext, Rect? effectClipRect, IEffect effect, out EffectorShaderEffectFrame frame)
     {
         frame = default!;
@@ -1956,12 +2034,15 @@ public static class EffectorRuntime
         var usedHostVisualBounds = TryGetHostVisualBounds(effect, out var hostBounds);
         var usedRenderThreadBounds = TakeRenderThreadEffectBounds(effect, out var renderBounds);
         var preferHostBounds = ShouldPreferHostBounds(effect, out var unclippedHostSize);
-        var authoritativeEffectRect = SelectAuthoritativeEffectRectCandidateWithHostPreference(
-            effectClipRect,
-            usedHostVisualBounds ? hostBounds : (Rect?)null,
-            usedRenderThreadBounds ? renderBounds : (Rect?)null,
-            preferHostBounds,
-            unclippedHostSize);
+        var authoritativeEffectRect =
+            PrefersUnclippedHostBounds(effect) && usedHostVisualBounds
+                ? new SelectedEffectRect(hostBounds, EffectRectSource.HostLogical)
+                : SelectAuthoritativeEffectRectCandidateWithHostPreference(
+                    effectClipRect,
+                    usedHostVisualBounds ? hostBounds : (Rect?)null,
+                    usedRenderThreadBounds ? renderBounds : (Rect?)null,
+                    preferHostBounds,
+                    unclippedHostSize);
         var intermediateSurfaceDpi = s_skiaIntermediateSurfaceDpiField?.GetValue(drawingContext) is Vector vector
             ? vector
             : new Vector(96d, 96d);
@@ -2422,6 +2503,7 @@ public static class EffectorRuntime
             frame.EffectContext.EffectiveOpacity,
             frame.EffectContext.UsesOpacitySaveLayer,
             new Rect(0d, 0d, localSourceRect.Width, localSourceRect.Height),
+            default,
             default,
             sourceSnapshot,
             new Rect(localSourceRect.Left, localSourceRect.Top, localSourceRect.Width, localSourceRect.Height),

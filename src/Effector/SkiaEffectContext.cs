@@ -7,17 +7,17 @@ namespace Effector;
 public readonly struct SkiaEffectContext
 {
     public SkiaEffectContext(double effectiveOpacity, bool usesOpacitySaveLayer)
-        : this(effectiveOpacity, usesOpacitySaveLayer, default, default, null, default)
+        : this(effectiveOpacity, usesOpacitySaveLayer, default, default, default, null, default)
     {
     }
 
     public SkiaEffectContext(double effectiveOpacity, bool usesOpacitySaveLayer, Rect inputBounds)
-        : this(effectiveOpacity, usesOpacitySaveLayer, inputBounds, default, null, default)
+        : this(effectiveOpacity, usesOpacitySaveLayer, inputBounds, default, default, null, default)
     {
     }
 
     public SkiaEffectContext(double effectiveOpacity, bool usesOpacitySaveLayer, Rect inputBounds, Rect sceneBounds)
-        : this(effectiveOpacity, usesOpacitySaveLayer, inputBounds, sceneBounds, null, default)
+        : this(effectiveOpacity, usesOpacitySaveLayer, inputBounds, sceneBounds, sceneBounds, null, default)
     {
     }
 
@@ -26,9 +26,10 @@ public readonly struct SkiaEffectContext
         bool usesOpacitySaveLayer,
         Rect inputBounds,
         Rect sceneBounds,
+        Rect generatedSourceBounds,
         SKImage? sourceImage,
         Rect sourceImageBounds)
-        : this(effectiveOpacity, usesOpacitySaveLayer, inputBounds, sceneBounds, sourceImage, sourceImageBounds, 1d, 1d)
+        : this(effectiveOpacity, usesOpacitySaveLayer, inputBounds, sceneBounds, generatedSourceBounds, sourceImage, sourceImageBounds, 1d, 1d)
     {
     }
 
@@ -37,6 +38,7 @@ public readonly struct SkiaEffectContext
         bool usesOpacitySaveLayer,
         Rect inputBounds,
         Rect sceneBounds,
+        Rect generatedSourceBounds,
         SKImage? sourceImage,
         Rect sourceImageBounds,
         double scaleX,
@@ -46,6 +48,9 @@ public readonly struct SkiaEffectContext
         UsesOpacitySaveLayer = usesOpacitySaveLayer;
         InputBounds = inputBounds;
         SceneBounds = sceneBounds;
+        GeneratedSourceBounds = generatedSourceBounds.Width > 0d && generatedSourceBounds.Height > 0d
+            ? generatedSourceBounds
+            : sceneBounds;
         SourceImage = sourceImage;
         SourceImageBounds = sourceImageBounds;
         ScaleX = scaleX <= 0d ? 1d : scaleX;
@@ -65,6 +70,10 @@ public readonly struct SkiaEffectContext
     public Rect SceneBounds { get; }
 
     public bool HasSceneBounds => SceneBounds.Width > 0d && SceneBounds.Height > 0d;
+
+    public Rect GeneratedSourceBounds { get; }
+
+    public bool HasGeneratedSourceBounds => GeneratedSourceBounds.Width > 0d && GeneratedSourceBounds.Height > 0d;
 
     public SKImage? SourceImage { get; }
 

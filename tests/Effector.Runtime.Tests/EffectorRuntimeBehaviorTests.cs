@@ -313,6 +313,74 @@ public sealed class EffectorRuntimeBehaviorTests
 
             Assert.Equal(new Rect(0d, 0d, 320d, 220d), context.InputBounds);
             Assert.Equal(new Rect(164d, 116d, 320d, 220d), context.SceneBounds);
+            Assert.Equal(new Rect(164d, 116d, 320d, 220d), context.GeneratedSourceBounds);
+        });
+    }
+
+    [Fact]
+    public void CreateEffectContext_Uses_Unclipped_Host_Size_When_RenderThreadBounds_Are_Clipped()
+    {
+        RunOnUiThread(() =>
+        {
+            var effect = new FilterEffect
+            {
+                Padding = new Thickness(24d),
+                Primitives = new FilterPrimitiveCollection(
+                    new ImagePrimitive(
+                        FilterImageSource.FromPicture(CreatePictureSource()),
+                        FilterAspectRatio.Default))
+            };
+
+            var host = new Border
+            {
+                Width = 320d,
+                Height = 220d,
+                Effect = EffectTestHelpers.AsEffect(effect)
+            };
+            var root = new Canvas
+            {
+                Width = 640d,
+                Height = 480d,
+                Children =
+                {
+                    host
+                }
+            };
+            Canvas.SetLeft(host, 140d);
+            Canvas.SetTop(host, 92d);
+
+            var window = new Window
+            {
+                Width = 640d,
+                Height = 480d,
+                Content = root
+            };
+
+            window.Show();
+            window.UpdateLayout();
+
+            var updateHostVisual = typeof(EffectorRuntime).GetMethod(
+                "UpdateHostVisualBounds",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            updateHostVisual.Invoke(null, new object[] { EffectTestHelpers.AsEffect(effect), host });
+
+            var renderBounds = new Rect(164d, 116d, 240d, 188d);
+            var createContextMethod = typeof(EffectorRuntime).GetMethod(
+                "CreateEffectContext",
+                BindingFlags.Static | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { typeof(IEffect), typeof(double), typeof(bool), typeof(Rect?) },
+                modifiers: null)!;
+
+            var context = (SkiaEffectContext)createContextMethod.Invoke(
+                null,
+                new object?[] { EffectTestHelpers.AsEffect(effect), 1d, false, renderBounds })!;
+
+            Assert.Equal(new Rect(0d, 0d, 320d, 220d), context.InputBounds);
+            Assert.Equal(new Rect(188d, 140d, 192d, 140d), context.SceneBounds);
+            Assert.Equal(new Rect(140d, 92d, 320d, 220d), context.GeneratedSourceBounds);
+
+            window.Close();
         });
     }
 
@@ -3113,6 +3181,36 @@ public sealed class EffectorRuntimeBehaviorTests
             usesLocalDrawingCoordinates: true,
             proxy: null,
             previousProxyImpl: null);
+    }
+
+    private static SKPicture CreatePictureSource()
+    {
+        var bounds = SKRect.Create(0f, 0f, 220f, 140f);
+        using var recorder = new SKPictureRecorder();
+        var canvas = recorder.BeginRecording(bounds);
+
+        using (var backgroundPaint = new SKPaint())
+        {
+            backgroundPaint.Shader = SKShader.CreateLinearGradient(
+                new SKPoint(0f, 0f),
+                new SKPoint(bounds.Right, bounds.Bottom),
+                new[]
+                {
+                    new SKColor(56, 116, 255),
+                    new SKColor(47, 204, 162),
+                    new SKColor(255, 201, 110)
+                },
+                null,
+                SKShaderTileMode.Clamp);
+            canvas.DrawRoundRect(bounds, 24f, 24f, backgroundPaint);
+        }
+
+        using (var sunPaint = new SKPaint { Color = new SKColor(255, 244, 184), IsAntialias = true })
+        {
+            canvas.DrawCircle(166f, 38f, 24f, sunPaint);
+        }
+
+        return recorder.EndRecording();
     }
 
     private static string GetScreenshotPath(string fileName)
