@@ -13,6 +13,9 @@ namespace Effector.Build.Tasks;
 
 internal sealed class EffectorWeaver
 {
+    private const string SkiaSourceCaptureValueFactoryInterfaceName = "Effector.ISkiaSourceCaptureValueFactory";
+    private const string SkiaSourceCaptureValueFactoryMethodName = "RequiresSourceCapture";
+
     private sealed class EffectDefinitionModel
     {
         public EffectDefinitionModel(
@@ -24,6 +27,7 @@ internal sealed class EffectorWeaver
             IReadOnlyList<PropertyDefinition> properties,
             bool supportsShaderFactory,
             bool supportsValueFactory,
+            bool supportsSourceCaptureValueFactory,
             bool supportsShaderValueFactory)
         {
             EffectType = effectType;
@@ -34,6 +38,7 @@ internal sealed class EffectorWeaver
             Properties = properties;
             SupportsShaderFactory = supportsShaderFactory;
             SupportsValueFactory = supportsValueFactory;
+            SupportsSourceCaptureValueFactory = supportsSourceCaptureValueFactory;
             SupportsShaderValueFactory = supportsShaderValueFactory;
         }
 
@@ -52,6 +57,8 @@ internal sealed class EffectorWeaver
         public bool SupportsShaderFactory { get; }
 
         public bool SupportsValueFactory { get; }
+
+        public bool SupportsSourceCaptureValueFactory { get; }
 
         public bool SupportsShaderValueFactory { get; }
     }
@@ -287,6 +294,7 @@ internal sealed class EffectorWeaver
 
         var supportsShaderFactory = ImplementsShaderFactory(factoryType, effectType);
         var supportsValueFactory = ImplementsInterface(factoryType, typeof(ISkiaEffectValueFactory).FullName);
+        var supportsSourceCaptureValueFactory = ImplementsInterface(factoryType, SkiaSourceCaptureValueFactoryInterfaceName);
         var supportsShaderValueFactory = ImplementsInterface(factoryType, typeof(ISkiaShaderEffectValueFactory).FullName);
         if (!supportsValueFactory)
         {
@@ -311,6 +319,7 @@ internal sealed class EffectorWeaver
             properties,
             supportsShaderFactory,
             supportsValueFactory,
+            supportsSourceCaptureValueFactory,
             supportsShaderValueFactory);
         return true;
     }
@@ -843,6 +852,30 @@ internal sealed class EffectorWeaver
         filterIl.Emit(OpCodes.Ldarg_1);
         filterIl.Emit(OpCodes.Callvirt, module.ImportReference(valueFilter));
         filterIl.Emit(OpCodes.Ret);
+
+        if (!model.SupportsSourceCaptureValueFactory)
+        {
+            return;
+        }
+
+        var requiresCaptureMethod = new MethodDefinition(
+            "RequiresSourceCapture",
+            MethodAttributes.Assembly | MethodAttributes.Static | MethodAttributes.HideBySig,
+            module.TypeSystem.Boolean);
+        requiresCaptureMethod.Parameters.Add(new ParameterDefinition("effect", ParameterAttributes.None, module.ImportReference(typeof(IEffect))));
+        helperType.Methods.Add(requiresCaptureMethod);
+
+        var valueRequiresCapture = ResolveFactoryMethod(
+            model.FactoryType,
+            SkiaSourceCaptureValueFactoryMethodName,
+            1,
+            module.ImportReference(typeof(object[])).FullName);
+        var requiresCaptureIl = requiresCaptureMethod.Body.GetILProcessor();
+        requiresCaptureIl.Emit(OpCodes.Ldsfld, factoryField);
+        requiresCaptureIl.Emit(OpCodes.Ldarg_0);
+        requiresCaptureIl.Emit(OpCodes.Call, getValues);
+        requiresCaptureIl.Emit(OpCodes.Callvirt, module.ImportReference(valueRequiresCapture));
+        requiresCaptureIl.Emit(OpCodes.Ret);
     }
 
     private static MethodDefinition AddShaderMethod(ModuleDefinition module, TypeDefinition helperType, EffectDefinitionModel model, FieldDefinition factoryField)
@@ -899,11 +932,15 @@ internal sealed class EffectorWeaver
         var freezeDelegateCtor = module.ImportReference(typeof(Func<IEffect, IImmutableEffect>).GetConstructors().Single());
         var paddingDelegateCtor = module.ImportReference(typeof(Func<IEffect, Thickness>).GetConstructors().Single());
         var filterDelegateCtor = module.ImportReference(typeof(Func<IEffect, SkiaEffectContext, SKImageFilter>).GetConstructors().Single());
+        var requiresCaptureDelegateCtor = module.ImportReference(typeof(Func<IEffect, bool>).GetConstructors().Single());
         var shaderDelegateCtor = module.ImportReference(typeof(Func<IEffect, SkiaShaderEffectContext, SkiaShaderEffect>).GetConstructors().Single());
         var createMutableMethod = helperType.Methods.Single(static candidate => candidate.Name == "CreateMutable");
         var freezeMethod = helperType.Methods.Single(static candidate => candidate.Name == "Freeze");
         var paddingMethod = helperType.Methods.Single(static candidate => candidate.Name == "GetPadding");
         var filterMethod = helperType.Methods.Single(static candidate => candidate.Name == "CreateFilter");
+        var requiresCaptureMethod = model.SupportsSourceCaptureValueFactory
+            ? helperType.Methods.Single(static candidate => candidate.Name == "RequiresSourceCapture")
+            : null;
         var shaderMethod = model.SupportsShaderFactory
             ? helperType.Methods.Single(static candidate => candidate.Name == "CreateShaderEffect")
             : null;
@@ -929,6 +966,17 @@ internal sealed class EffectorWeaver
         il.Emit(OpCodes.Ldnull);
         il.Emit(OpCodes.Ldftn, filterMethod);
         il.Emit(OpCodes.Newobj, filterDelegateCtor);
+
+        if (requiresCaptureMethod is not null)
+        {
+            il.Emit(OpCodes.Ldnull);
+            il.Emit(OpCodes.Ldftn, requiresCaptureMethod);
+            il.Emit(OpCodes.Newobj, requiresCaptureDelegateCtor);
+        }
+        else
+        {
+            il.Emit(OpCodes.Ldnull);
+        }
 
         if (shaderMethod is not null)
         {

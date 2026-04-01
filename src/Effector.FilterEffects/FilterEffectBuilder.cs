@@ -38,6 +38,31 @@ internal static class FilterEffectBuilder
     private static readonly FilterComponentTransferChannel IdentityChannel = FilterComponentTransferChannel.Identity;
     private static readonly ConditionalWeakTable<SKImageFilter, FilterDependencyHolder> FilterDependencies = new();
 
+    public static bool RequiresSourceCapture(FilterPrimitiveCollection primitives)
+    {
+        if (primitives.Count == 0)
+        {
+            return false;
+        }
+
+        var namedResults = new Dictionary<string, bool>(StringComparer.Ordinal);
+        var previousNeedsSource = false;
+
+        for (var index = 0; index < primitives.Count; index++)
+        {
+            var primitive = primitives[index];
+            var needsSource = PrimitiveRequiresSourceCapture(primitive, namedResults, previousNeedsSource, index == 0);
+            previousNeedsSource = needsSource;
+
+            if (!string.IsNullOrWhiteSpace(primitive.Result))
+            {
+                namedResults[primitive.Result!] = needsSource;
+            }
+        }
+
+        return previousNeedsSource;
+    }
+
     public static SKImageFilter? Build(FilterPrimitiveCollection primitives, SkiaEffectContext context)
     {
         if (primitives.Count == 0)
@@ -66,6 +91,81 @@ internal static class FilterEffectBuilder
         }
 
         return lastResult?.Filter;
+    }
+
+    private static bool PrimitiveRequiresSourceCapture(
+        FilterPrimitive primitive,
+        Dictionary<string, bool> namedResults,
+        bool previousNeedsSource,
+        bool isFirst)
+    {
+        return primitive switch
+        {
+            BlendPrimitive blend => InputRequiresSourceCapture(blend.Input, namedResults, previousNeedsSource, isFirst) ||
+                                    InputRequiresSourceCapture(blend.Input2, namedResults, previousNeedsSource, isFirst: false),
+            ColorMatrixPrimitive colorMatrix => InputRequiresSourceCapture(colorMatrix.Input, namedResults, previousNeedsSource, isFirst),
+            ComponentTransferPrimitive componentTransfer => InputRequiresSourceCapture(componentTransfer.Input, namedResults, previousNeedsSource, isFirst),
+            CompositePrimitive composite => InputRequiresSourceCapture(composite.Input, namedResults, previousNeedsSource, isFirst) ||
+                                            InputRequiresSourceCapture(composite.Input2, namedResults, previousNeedsSource, isFirst: false),
+            ConvolveMatrixPrimitive convolve => InputRequiresSourceCapture(convolve.Input, namedResults, previousNeedsSource, isFirst),
+            DiffuseLightingPrimitive diffuse => InputRequiresSourceCapture(diffuse.Input, namedResults, previousNeedsSource, isFirst),
+            DisplacementMapPrimitive displacement => InputRequiresSourceCapture(displacement.Input, namedResults, previousNeedsSource, isFirst) ||
+                                                     InputRequiresSourceCapture(displacement.Input2, namedResults, previousNeedsSource, isFirst: false),
+            FloodPrimitive => false,
+            GaussianBlurPrimitive blur => InputRequiresSourceCapture(blur.Input, namedResults, previousNeedsSource, isFirst),
+            ImagePrimitive => false,
+            MergePrimitive merge => MergeRequiresSourceCapture(merge, namedResults, previousNeedsSource, isFirst),
+            MorphologyPrimitive morphology => InputRequiresSourceCapture(morphology.Input, namedResults, previousNeedsSource, isFirst),
+            OffsetPrimitive offset => InputRequiresSourceCapture(offset.Input, namedResults, previousNeedsSource, isFirst),
+            SpecularLightingPrimitive specular => InputRequiresSourceCapture(specular.Input, namedResults, previousNeedsSource, isFirst),
+            TilePrimitive tile => InputRequiresSourceCapture(tile.Input, namedResults, previousNeedsSource, isFirst),
+            TurbulencePrimitive => false,
+            _ => true
+        };
+    }
+
+    private static bool MergeRequiresSourceCapture(
+        MergePrimitive primitive,
+        Dictionary<string, bool> namedResults,
+        bool previousNeedsSource,
+        bool isFirst)
+    {
+        if (primitive.Inputs.Count == 0)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < primitive.Inputs.Count; index++)
+        {
+            if (InputRequiresSourceCapture(primitive.Inputs[index], namedResults, previousNeedsSource, isFirst && index == 0))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool InputRequiresSourceCapture(
+        FilterInput input,
+        Dictionary<string, bool> namedResults,
+        bool previousNeedsSource,
+        bool isFirst)
+    {
+        return input.Kind switch
+        {
+            FilterInputKind.PreviousResult => isFirst || previousNeedsSource,
+            FilterInputKind.SourceGraphic => true,
+            FilterInputKind.SourceAlpha => true,
+            FilterInputKind.NamedResult => !string.IsNullOrWhiteSpace(input.ResultName) &&
+                                           namedResults.TryGetValue(input.ResultName!, out var needsSource) &&
+                                           needsSource,
+            FilterInputKind.BackgroundImage or
+            FilterInputKind.BackgroundAlpha or
+            FilterInputKind.FillPaint or
+            FilterInputKind.StrokePaint => false,
+            _ => false
+        };
     }
 
     private static FilterResult? BuildPrimitive(
@@ -1006,34 +1106,25 @@ internal static class FilterEffectBuilder
             return null;
         }
 
-        var rasterWidth = Math.Max(1, (int)Math.Ceiling(mappedRect.Width));
-        var rasterHeight = Math.Max(1, (int)Math.Ceiling(mappedRect.Height));
-        using var surface = SKSurface.Create(new SKImageInfo(rasterWidth, rasterHeight, SKColorType.Rgba8888, SKAlphaType.Premul));
-        if (surface is null)
-        {
-            return null;
-        }
-
-        var canvas = surface.Canvas;
+        using var recorder = new SKPictureRecorder();
+        var pictureBounds = RequiresDestinationClip(mappedRect, destinationRect, aspectRatio)
+            ? destinationRect
+            : mappedRect;
+        var canvas = recorder.BeginRecording(pictureBounds);
         canvas.Clear(SKColors.Transparent);
-        canvas.Scale(rasterWidth / sourceRect.Width, rasterHeight / sourceRect.Height);
+        canvas.Translate(mappedRect.Left, mappedRect.Top);
+        canvas.Scale(mappedRect.Width / sourceRect.Width, mappedRect.Height / sourceRect.Height);
         canvas.Translate(-sourceRect.Left, -sourceRect.Top);
         canvas.DrawPicture(source.Picture);
-        canvas.Flush();
+        var picture = recorder.EndRecording();
 
-        var image = surface.Snapshot();
-        var rasterRect = SKRect.Create(0f, 0f, image.Width, image.Height);
-        var filter = SKImageFilter.CreateImage(
-            image,
-            rasterRect,
-            mappedRect,
-            new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
+        var filter = SKImageFilter.CreatePicture(picture, pictureBounds);
         if (filter is null)
         {
             return null;
         }
 
-        filter = AttachDependencies(filter, image);
+        filter = AttachDependencies(filter, picture);
         return ClipImageFilterToDestinationRect(filter, mappedRect, destinationRect, aspectRatio);
     }
 

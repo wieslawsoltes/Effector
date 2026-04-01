@@ -203,6 +203,7 @@ public static class EffectorRuntime
         Func<IEffect, IImmutableEffect> freeze,
         Func<IEffect, Thickness> padding,
         Func<IEffect, SkiaEffectContext, SKImageFilter?> createFilter,
+        Func<IEffect, bool>? requiresSourceCapture,
         Func<IEffect, SkiaShaderEffectContext, SkiaShaderEffect?>? createShaderEffect)
     {
         if (mutableType is null)
@@ -226,7 +227,15 @@ public static class EffectorRuntime
                 return;
             }
 
-            var descriptor = new EffectorEffectDescriptor(mutableType, immutableType, createMutable, freeze, padding, createFilter, createShaderEffect);
+            var descriptor = new EffectorEffectDescriptor(
+                mutableType,
+                immutableType,
+                createMutable,
+                freeze,
+                padding,
+                createFilter,
+                requiresSourceCapture,
+                createShaderEffect);
             Descriptors[mutableType] = descriptor;
             Descriptors[immutableType] = descriptor;
 
@@ -246,7 +255,7 @@ public static class EffectorRuntime
 
         lock (Sync)
         {
-            if (!Descriptors.TryGetValue(effect.GetType(), out var descriptor))
+            if (!TryGetDescriptor(effect.GetType(), out var descriptor) || descriptor is null)
             {
                 frozen = default!;
                 return false;
@@ -299,7 +308,7 @@ public static class EffectorRuntime
 
         lock (Sync)
         {
-            if (!Descriptors.TryGetValue(effect.GetType(), out var descriptor))
+            if (!TryGetDescriptor(effect.GetType(), out var descriptor) || descriptor is null)
             {
                 padding = default;
                 return false;
@@ -765,12 +774,7 @@ public static class EffectorRuntime
 
         EffectorEffectDescriptor? descriptor;
 
-        lock (Sync)
-        {
-            Descriptors.TryGetValue(effect.GetType(), out descriptor);
-        }
-
-        if (descriptor is null)
+        if (!TryGetDescriptor(effect.GetType(), out descriptor) || descriptor is null)
         {
             filter = null;
             return false;
@@ -789,12 +793,7 @@ public static class EffectorRuntime
 
         EffectorEffectDescriptor? descriptor;
 
-        lock (Sync)
-        {
-            Descriptors.TryGetValue(effect.GetType(), out descriptor);
-        }
-
-        if (descriptor is null)
+        if (!TryGetDescriptor(effect.GetType(), out descriptor) || descriptor is null)
         {
             filter = null;
             return false;
@@ -813,12 +812,7 @@ public static class EffectorRuntime
 
         EffectorEffectDescriptor? descriptor;
 
-        lock (Sync)
-        {
-            Descriptors.TryGetValue(effect.GetType(), out descriptor);
-        }
-
-        if (descriptor?.CreateShaderEffect is null)
+        if (!TryGetDescriptor(effect.GetType(), out descriptor) || descriptor?.CreateShaderEffect is null)
         {
             shaderEffect = null;
             return false;
@@ -1765,7 +1759,31 @@ public static class EffectorRuntime
     {
         lock (Sync)
         {
-            return Descriptors.TryGetValue(effectType, out descriptor);
+            if (Descriptors.TryGetValue(effectType, out descriptor))
+            {
+                return true;
+            }
+
+            for (var current = effectType.BaseType; current is not null; current = current.BaseType)
+            {
+                if (Descriptors.TryGetValue(current, out descriptor))
+                {
+                    Descriptors[effectType] = descriptor;
+                    return true;
+                }
+            }
+
+            descriptor = Descriptors.Values.FirstOrDefault(candidate =>
+                candidate.MutableType.IsAssignableFrom(effectType) ||
+                candidate.ImmutableType.IsAssignableFrom(effectType));
+
+            if (descriptor is not null)
+            {
+                Descriptors[effectType] = descriptor;
+                return true;
+            }
+
+            return false;
         }
     }
 
@@ -1902,7 +1920,12 @@ public static class EffectorRuntime
             return false;
         }
 
-        return descriptor.RequiresSourceCapture;
+        if (!descriptor.RequiresSourceCapture)
+        {
+            return false;
+        }
+
+        return descriptor.RequiresSourceCaptureOverride?.Invoke(effect) ?? true;
     }
 
     private static bool TryCreateCaptureFrame(object drawingContext, Rect? effectClipRect, IEffect effect, out EffectorShaderEffectFrame frame)
@@ -2346,10 +2369,24 @@ public static class EffectorRuntime
 
     private static SKImage? CreateRasterImageCopy(SKImage sourceSnapshot, int width, int height)
     {
+        var targetWidth = Math.Max(width, 1);
+        var targetHeight = Math.Max(height, 1);
+
+        if (sourceSnapshot.Width == targetWidth && sourceSnapshot.Height == targetHeight)
+        {
+            if (!sourceSnapshot.IsTextureBacked)
+            {
+                return null;
+            }
+
+            var rasterImage = sourceSnapshot.ToRasterImage();
+            return ReferenceEquals(rasterImage, sourceSnapshot) ? null : rasterImage;
+        }
+
         using var surface = SKSurface.Create(
             new SKImageInfo(
-                Math.Max(width, 1),
-                Math.Max(height, 1),
+                targetWidth,
+                targetHeight,
                 SKImageInfo.PlatformColorType,
                 SKAlphaType.Premul));
         if (surface is null)
@@ -2361,7 +2398,7 @@ public static class EffectorRuntime
         surface.Canvas.DrawImage(
             sourceSnapshot,
             SKRect.Create(0f, 0f, sourceSnapshot.Width, sourceSnapshot.Height),
-            SKRect.Create(0f, 0f, Math.Max(width, 1), Math.Max(height, 1)),
+            SKRect.Create(0f, 0f, targetWidth, targetHeight),
             new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
         surface.Canvas.Flush();
         surface.Flush();

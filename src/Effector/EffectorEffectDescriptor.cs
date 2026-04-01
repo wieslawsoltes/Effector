@@ -20,6 +20,7 @@ internal sealed class EffectorEffectDescriptor
         Func<IEffect, IImmutableEffect> freeze,
         Func<IEffect, Thickness> padding,
         Func<IEffect, SkiaEffectContext, SKImageFilter?> createFilter,
+        Func<IEffect, bool>? requiresSourceCapture,
         Func<IEffect, SkiaShaderEffectContext, SkiaShaderEffect?>? createShaderEffect)
     {
         MutableType = mutableType ?? throw new ArgumentNullException(nameof(mutableType));
@@ -28,6 +29,7 @@ internal sealed class EffectorEffectDescriptor
         Freeze = freeze ?? throw new ArgumentNullException(nameof(freeze));
         Padding = padding ?? throw new ArgumentNullException(nameof(padding));
         CreateFilter = createFilter ?? throw new ArgumentNullException(nameof(createFilter));
+        RequiresSourceCaptureOverride = requiresSourceCapture;
         CreateShaderEffect = createShaderEffect;
 
         var effectAttribute = mutableType.GetCustomAttribute<SkiaEffectAttribute>();
@@ -51,6 +53,8 @@ internal sealed class EffectorEffectDescriptor
     public string AlternateParseName { get; }
 
     public bool RequiresSourceCapture { get; }
+
+    public Func<IEffect, bool>? RequiresSourceCaptureOverride { get; }
 
     public Func<IEffect, IImmutableEffect> Freeze { get; }
 

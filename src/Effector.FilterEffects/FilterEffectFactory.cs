@@ -5,7 +5,7 @@ using SkiaSharp;
 
 namespace Effector.FilterEffects;
 
-public sealed class FilterEffectFactory : ISkiaEffectFactory<FilterEffect>, ISkiaEffectValueFactory
+public sealed class FilterEffectFactory : ISkiaEffectFactory<FilterEffect>, ISkiaEffectValueFactory, ISkiaSourceCaptureValueFactory
 {
     private const int PrimitivesIndex = 0;
     private const int PaddingIndex = 1;
@@ -54,5 +54,16 @@ public sealed class FilterEffectFactory : ISkiaEffectFactory<FilterEffect>, ISki
         }
 
         return FilterEffectBuilder.Build(primitives, context);
+    }
+
+    public bool RequiresSourceCapture(object[] values)
+    {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        var primitives = values[PrimitivesIndex] as FilterPrimitiveCollection;
+        return primitives is not null && FilterEffectBuilder.RequiresSourceCapture(primitives);
     }
 }
