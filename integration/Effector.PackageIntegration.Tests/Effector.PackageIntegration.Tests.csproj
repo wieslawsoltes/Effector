@@ -5,6 +5,7 @@
     <RootNamespace>Effector.PackageIntegration.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,12 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Effector.Sample.Effects</AssemblyName>
     <RootNamespace>Effector.Sample.Effects</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Effector\Effector.csproj" />
+    <ProjectReference Include="..\..\src\Effector\Effector.csproj"
+                      AdditionalProperties="GeneratePackageOnBuild=false" />
     <PackageReference Include="Avalonia" />
     <PackageReference Include="SkiaSharp" />
   </ItemGroup>

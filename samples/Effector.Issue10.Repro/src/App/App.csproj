@@ -16,7 +16,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../../src/Effector/Effector.csproj" />
+    <ProjectReference Include="../../../../src/Effector/Effector.csproj"
+                      AdditionalProperties="GeneratePackageOnBuild=false" />
   </ItemGroup>
 
   <Import Project="../../../../src/Effector.Build/buildTransitive/Effector.Build.targets"

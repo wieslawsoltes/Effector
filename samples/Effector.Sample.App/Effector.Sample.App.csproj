@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Effector.Sample.App</AssemblyName>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Effector\Effector.csproj" />
+    <ProjectReference Include="..\..\src\Effector\Effector.csproj"
+                      AdditionalProperties="GeneratePackageOnBuild=false" />
     <ProjectReference Include="..\Effector.Sample.Effects\Effector.Sample.Effects.csproj" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
