@@ -25,6 +25,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   SAMPLE_AOT_RUNTIME_IDENTIFIER: osx-arm64
+  SAMPLE_AOT_TARGET_FRAMEWORK: net10.0
 
 jobs:
   version:
@@ -130,7 +131,7 @@ jobs:
         run: dotnet publish samples/Effector.Sample.App/Effector.Sample.App.csproj -c Release -r "${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}" -p:PublishAot=true -p:StripSymbols=false -p:GeneratePackageOnBuild=false -p:Version="${{ needs.version.outputs.version }}"
 
       - name: Archive NativeAOT sample app
-        run: ditto -c -k --sequesterRsrc --keepParent "samples/Effector.Sample.App/bin/Release/net8.0/${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}/publish" "artifacts/Effector.Sample.App-${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}-aot.zip"
+        run: ditto -c -k --sequesterRsrc --keepParent "samples/Effector.Sample.App/bin/Release/${{ env.SAMPLE_AOT_TARGET_FRAMEWORK }}/${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}/publish" "artifacts/Effector.Sample.App-${{ env.SAMPLE_AOT_RUNTIME_IDENTIFIER }}-aot.zip"
 
       - name: Upload NativeAOT sample artifact
         uses: actions/upload-artifact@v4
