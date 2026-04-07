@@ -157,7 +157,7 @@ internal sealed class AvaloniaAssemblyPatcher
             typeof(EffectorRuntime).GetMethod(nameof(EffectorRuntime.ParseEffectPatched))!);
 
         InjectEffectTransitionPrefix(module, GetMethod(effectTransitionType, "DoTransition", 3));
-        InjectEffectAnimatorApplyPrefix(module, GetMethod(effectAnimatorType, "Apply", 5));
+        InjectEffectAnimatorApplyPrefix(module, GetMethod(effectAnimatorType, "Apply", 6));
         RewriteEffectAnimatorInterpolate(module, GetMethod(effectAnimatorType, "Interpolate", 3));
         // Do not rewrite ServerCompositionVisual.PushEffect. The patched body destabilizes the
         // desktop JIT on macOS arm64 and can crash the sample app in the render loop.
@@ -262,6 +262,7 @@ internal sealed class AvaloniaAssemblyPatcher
         il.InsertBefore(originalFirst, il.Create(OpCodes.Ldarg_3));
         il.InsertBefore(originalFirst, il.Create(OpCodes.Ldarg_S, method.Parameters[3]));
         il.InsertBefore(originalFirst, il.Create(OpCodes.Ldarg_S, method.Parameters[4]));
+        il.InsertBefore(originalFirst, il.Create(OpCodes.Ldarg_S, method.Parameters[5]));
         il.InsertBefore(originalFirst, il.Create(OpCodes.Ldloca_S, disposableLocal));
         il.InsertBefore(originalFirst, il.Create(OpCodes.Call, tryApply));
         il.InsertBefore(originalFirst, il.Create(OpCodes.Brfalse_S, continueOriginal));

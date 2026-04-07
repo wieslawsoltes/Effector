@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Effector.Build.Tasks</AssemblyName>
     <IsPackable>false</IsPackable>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -9,12 +9,12 @@
 
   <ItemGroup Condition="'$(EffectorUseBuiltRuntimeReference)' != 'true'">
     <ProjectReference Include="..\Effector\Effector.csproj"
-                      AdditionalProperties="EffectorSkipCustomTargets=true;GeneratePackageOnBuild=false" />
+                      AdditionalProperties="EffectorSkipCustomTargets=true;GeneratePackageOnBuild=false;BaseOutputPath=$(MSBuildThisFileDirectory)..\Effector\bin-buildtasks\" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(EffectorUseBuiltRuntimeReference)' == 'true'">
     <Reference Include="Effector">
-      <HintPath>..\Effector\bin\$(Configuration)\netstandard2.0\Effector.dll</HintPath>
+      <HintPath>..\Effector\bin\$(Configuration)\net8.0\Effector.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>

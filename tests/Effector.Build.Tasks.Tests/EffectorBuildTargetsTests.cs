@@ -33,8 +33,8 @@ public sealed class EffectorBuildTargetsTests
         var initialBasePath = Path.Combine(assetsRoot, "arm64-v8a", "Avalonia.Base.dll");
         var initialSkiaPath = Path.Combine(assetsRoot, "arm64-v8a", "Avalonia.Skia.dll");
 
-        Assert.False(scanner.Scan(initialBasePath, "11.3.12", AvaloniaPatchAssemblyKind.Base).IsAlreadyPatched);
-        Assert.False(scanner.Scan(initialSkiaPath, "11.3.12", AvaloniaPatchAssemblyKind.Skia).IsAlreadyPatched);
+        Assert.False(scanner.Scan(initialBasePath, "12.0.0", AvaloniaPatchAssemblyKind.Base).IsAlreadyPatched);
+        Assert.False(scanner.Scan(initialSkiaPath, "12.0.0", AvaloniaPatchAssemblyKind.Skia).IsAlreadyPatched);
 
         var projectPath = Path.Combine(testRoot, "AndroidPatchHarness.csproj");
         CreateAndroidPatchHarnessProject(projectPath, intermediateOutputPath);
@@ -56,8 +56,8 @@ public sealed class EffectorBuildTargetsTests
         foreach (var abi in new[] { "arm64-v8a", "x86_64" })
         {
             var abiDirectory = Path.Combine(assetsRoot, abi);
-            var baseScan = scanner.Scan(Path.Combine(abiDirectory, "Avalonia.Base.dll"), "11.3.12", AvaloniaPatchAssemblyKind.Base);
-            var skiaScan = scanner.Scan(Path.Combine(abiDirectory, "Avalonia.Skia.dll"), "11.3.12", AvaloniaPatchAssemblyKind.Skia);
+            var baseScan = scanner.Scan(Path.Combine(abiDirectory, "Avalonia.Base.dll"), "12.0.0", AvaloniaPatchAssemblyKind.Base);
+            var skiaScan = scanner.Scan(Path.Combine(abiDirectory, "Avalonia.Skia.dll"), "12.0.0", AvaloniaPatchAssemblyKind.Skia);
 
             Assert.True(baseScan.IsAlreadyPatched, $"Expected Avalonia.Base.dll in '{abiDirectory}' to be patched.{Environment.NewLine}{result.Output}");
             Assert.True(skiaScan.IsAlreadyPatched, $"Expected Avalonia.Skia.dll in '{abiDirectory}' to be patched.{Environment.NewLine}{result.Output}");
@@ -146,7 +146,7 @@ public sealed class EffectorBuildTargetsTests
                 "Effector.Build.Tasks",
                 "bin",
                 configuration,
-                "netstandard2.0",
+                "net8.0",
                 "Effector.Build.Tasks.dll"
             },
             sourceFilePath);

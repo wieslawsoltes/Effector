@@ -4,7 +4,7 @@
 [![Integration](https://img.shields.io/github/actions/workflow/status/wieslawsoltes/Effector/integration.yml?branch=main&label=integration)](https://github.com/wieslawsoltes/Effector/actions/workflows/integration.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/wieslawsoltes/Effector/release.yml?label=release)](https://github.com/wieslawsoltes/Effector/actions/workflows/release.yml)
 
-Effector brings extensible Skia-backed custom effects to Avalonia `11.3.12` while preserving the public `Visual.Effect : IEffect?` contract. It combines compile-time effect weaving, app-local Avalonia assembly patching, immutable render-thread snapshots, runtime shader support, input-driven effects, and NativeAOT-aware packaging.
+Effector brings extensible Skia-backed custom effects to Avalonia `12.0.0` while preserving the public `Visual.Effect : IEffect?` contract. It combines compile-time effect weaving, app-local Avalonia assembly patching, immutable render-thread snapshots, runtime shader support, input-driven effects, and NativeAOT-aware packaging.
 
 ## Packages
 
@@ -23,13 +23,13 @@ Effector brings extensible Skia-backed custom effects to Avalonia `11.3.12` whil
 
 ## Compatibility
 
-- Avalonia: `11.3.12`
+- Avalonia: `12.0.0`
 - Renderer: `Avalonia.Skia`
 - Runtime targets:
   - normal desktop JIT builds are supported
   - NativeAOT publish is supported through the packaged MSBuild patching pipeline
 - Not targeted in this repository:
-  - arbitrary Avalonia versions outside `11.3.12`
+  - arbitrary Avalonia versions outside `12.0.0`
   - non-Skia renderers
   - string parsers or transitions for effects not registered through Effector
 
@@ -263,7 +263,7 @@ Supported MSBuild switches:
   <EffectorEnabled>true</EffectorEnabled>
   <EffectorStrict>true</EffectorStrict>
   <EffectorVerbose>false</EffectorVerbose>
-  <EffectorSupportedAvaloniaVersion>11.3.12</EffectorSupportedAvaloniaVersion>
+  <EffectorSupportedAvaloniaVersion>12.0.0</EffectorSupportedAvaloniaVersion>
 </PropertyGroup>
 ```
 
@@ -451,7 +451,7 @@ There is also a dedicated package-consumer workflow:
 
 ## Limitations
 
-- Avalonia version support is intentionally pinned to `11.3.12`.
+- Avalonia version support is intentionally pinned to `12.0.0`.
 - Effector is designed around `Avalonia.Skia`.
 - If your effect needs render-thread execution, implement the value-factory interfaces so rendering can use immutable snapshots only.
 - Unsupported or incompatible effect types during interpolation fall back to step behavior rather than inventing custom interpolation semantics.

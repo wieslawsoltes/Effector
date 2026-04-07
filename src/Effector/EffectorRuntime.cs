@@ -20,7 +20,7 @@ namespace Effector;
 
 public static class EffectorRuntime
 {
-    private const string SupportedAvaloniaVersion = "11.3.12";
+    private const string SupportedAvaloniaVersion = "12.0.0";
     private static readonly Version? SkiaSharpAssemblyVersion = typeof(SKRuntimeEffect).Assembly.GetName().Version;
     private static readonly bool IsNativeAot = GetIsNativeAot();
     private static readonly bool? DirectRuntimeShadersOverride = ParseOptionalBooleanEnvironmentVariable("EFFECTOR_ENABLE_DIRECT_RUNTIME_SHADERS");
@@ -136,6 +136,7 @@ public static class EffectorRuntime
     {
         None,
         HostLogical,
+        EffectClipLogical,
         EffectClipCanvas,
         RenderCanvas
     }
@@ -450,6 +451,7 @@ public static class EffectorRuntime
         object? clock,
         IObservable<bool> match,
         Action? onComplete,
+        bool shouldPauseOnInvisible,
         out IDisposable? disposable)
     {
         if (!SupportsCustomEffectAnimation(animator))
@@ -461,6 +463,7 @@ public static class EffectorRuntime
         EnsureInitialized();
         EnsureEffectAnimatorMetadata(animator);
 
+        _ = shouldPauseOnInvisible;
         var subject = s_effectAnimatorDisposeSubjectCtor.Invoke(new object?[] { animator, animation, control, clock, onComplete });
         disposable = new EffectorCompositeDisposable(
             match.Subscribe((IObserver<bool>)subject),
@@ -1116,7 +1119,7 @@ public static class EffectorRuntime
             return false;
         }
 
-        var root = TopLevel.GetTopLevel(visual) as Visual ?? visual.GetVisualRoot() as Visual;
+        var root = TopLevel.GetTopLevel(visual) as Visual;
         if (root is not null)
         {
             if (ReferenceEquals(root, visual))
@@ -1463,7 +1466,7 @@ public static class EffectorRuntime
         if (!string.Equals(actual, SupportedAvaloniaVersion, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Effector only supports Avalonia 11.3.12. Detected {assemblyName} {actual}.");
+                $"Effector only supports Avalonia 12.0.0. Detected {assemblyName} {actual}.");
         }
     }
 
@@ -1580,15 +1583,21 @@ public static class EffectorRuntime
         var usedHostVisualBounds = TryGetHostVisualBounds(effect, out var hostBounds);
         var usedRenderThreadBounds = TakeRenderThreadEffectBounds(effect, out var renderBounds);
         var preferHostBounds = ShouldPreferHostBounds(effect, out var unclippedHostSize);
-        var authoritativeEffectRect = SelectAuthoritativeEffectRectCandidateWithHostPreference(
+        var intermediateSurfaceDpi = s_skiaIntermediateSurfaceDpiField?.GetValue(drawingContext) is Vector vector
+            ? vector
+            : new Vector(96d, 96d);
+        var effectClipRectCandidate = NormalizeEffectClipRectCandidate(
             effectClipRect,
+            usedHostVisualBounds ? hostBounds : (Rect?)null,
+            usedRenderThreadBounds ? renderBounds : (Rect?)null,
+            totalMatrix,
+            intermediateSurfaceDpi);
+        var authoritativeEffectRect = SelectAuthoritativeEffectRectCandidateWithHostPreference(
+            effectClipRectCandidate,
             usedHostVisualBounds ? hostBounds : (Rect?)null,
             usedRenderThreadBounds ? renderBounds : (Rect?)null,
             preferHostBounds,
             unclippedHostSize);
-        var intermediateSurfaceDpi = s_skiaIntermediateSurfaceDpiField?.GetValue(drawingContext) is Vector vector
-            ? vector
-            : new Vector(96d, 96d);
         var logicalEffectBounds = ResolveLogicalEffectBounds(authoritativeEffectRect, intermediateSurfaceDpi, deviceClip);
         var deviceEffectBounds = ResolveDeviceEffectBounds(authoritativeEffectRect, intermediateSurfaceDpi, deviceClip);
         TraceShaderBoundsSelection(
@@ -1837,14 +1846,7 @@ public static class EffectorRuntime
                 ?? throw new InvalidOperationException("Avalonia.Skia failed to create a compatible shader capture layer.");
             var renderTargetType = typeof(IBitmapImpl).Assembly.GetType("Avalonia.Platform.IRenderTarget", throwOnError: true)
                 ?? throw new InvalidOperationException("Avalonia.Base did not expose Avalonia.Platform.IRenderTarget.");
-            var createDrawingContext = renderTargetType.GetMethod(
-                "CreateDrawingContext",
-                BindingFlags.Instance | BindingFlags.Public,
-                binder: null,
-                types: new[] { typeof(bool) },
-                modifiers: null)
-                ?? throw new MissingMethodException(renderTargetType.FullName, "CreateDrawingContext");
-            var drawingContext = createDrawingContext.Invoke(layer, new object[] { false }) as Avalonia.Platform.IDrawingContextImpl
+            var drawingContext = CreateShaderLayerDrawingContext(layer, renderTargetType, pixelSize)
                 ?? throw new InvalidOperationException("Avalonia.Skia capture layer failed to create a drawing context.");
             s_skiaRenderOptionsProperty.SetValue(
                 drawingContext,
@@ -1869,6 +1871,62 @@ public static class EffectorRuntime
         {
             return CreateRasterShaderCaptureContext(sourceDrawingContext, pixelSize);
         }
+        catch (Exception ex) when (ex is MissingMethodException or TargetInvocationException)
+        {
+            return CreateRasterShaderCaptureContext(sourceDrawingContext, pixelSize);
+        }
+    }
+
+    private static Avalonia.Platform.IDrawingContextImpl? CreateShaderLayerDrawingContext(
+        IDisposable layer,
+        Type renderTargetType,
+        PixelSize pixelSize)
+    {
+        var layerType = layer.GetType();
+        var createDrawingContext = layerType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .FirstOrDefault(method =>
+            {
+                if (!method.Name.EndsWith("CreateDrawingContext", StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                var parameters = method.GetParameters();
+                return parameters.Length == 1 && parameters[0].ParameterType == typeof(bool);
+            });
+        if (createDrawingContext is not null)
+        {
+            return createDrawingContext.Invoke(layer, new object[] { false }) as Avalonia.Platform.IDrawingContextImpl;
+        }
+
+        var sceneInfoType = renderTargetType.GetNestedType("RenderTargetSceneInfo", BindingFlags.Public | BindingFlags.NonPublic);
+        var createDrawingContextWithSceneInfo =
+            sceneInfoType is null
+                ? null
+                : layerType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                    .FirstOrDefault(method =>
+                    {
+                        if (!method.Name.EndsWith("CreateDrawingContext", StringComparison.Ordinal))
+                        {
+                            return false;
+                        }
+
+                        var parameters = method.GetParameters();
+                        return parameters.Length == 2 &&
+                               parameters[0].ParameterType == sceneInfoType &&
+                               parameters[1].ParameterType.IsByRef;
+                    });
+        if (createDrawingContextWithSceneInfo is null)
+        {
+            throw new MissingMethodException(renderTargetType.FullName, "CreateDrawingContext");
+        }
+
+        var sceneInfo = Activator.CreateInstance(sceneInfoType!, pixelSize, 1d)
+            ?? throw new InvalidOperationException("Failed to create Avalonia.Platform.IRenderTarget.RenderTargetSceneInfo.");
+        var propertiesType = createDrawingContextWithSceneInfo.GetParameters()[1].ParameterType.GetElementType()
+            ?? throw new InvalidOperationException("Failed to resolve Avalonia.Platform.RenderTargetDrawingContextProperties.");
+        var arguments = new[] { sceneInfo, Activator.CreateInstance(propertiesType) };
+        return createDrawingContextWithSceneInfo.Invoke(layer, arguments) as Avalonia.Platform.IDrawingContextImpl;
     }
 
     private static (SKSurface Surface, IDisposable Owner, IDisposable? DrawingContext) CreateRasterShaderCaptureContext(
@@ -2105,6 +2163,7 @@ public static class EffectorRuntime
         return selectedEffectRect.Source switch
         {
             EffectRectSource.HostLogical => ToSKRect(selectedEffectRect.Rect.Value),
+            EffectRectSource.EffectClipLogical => ToSKRect(selectedEffectRect.Rect.Value),
             EffectRectSource.EffectClipCanvas => ToLogicalRect(selectedEffectRect.Rect.Value, dpi),
             EffectRectSource.RenderCanvas => ToLogicalRect(selectedEffectRect.Rect.Value, dpi),
             _ => ToLogicalRect(deviceClip, dpi)
@@ -2121,6 +2180,7 @@ public static class EffectorRuntime
         return selectedEffectRect.Source switch
         {
             EffectRectSource.HostLogical => ToDeviceRect(selectedEffectRect.Rect.Value, dpi),
+            EffectRectSource.EffectClipLogical => ToDeviceRect(selectedEffectRect.Rect.Value, dpi),
             EffectRectSource.EffectClipCanvas => ToCanvasRect(selectedEffectRect.Rect.Value),
             EffectRectSource.RenderCanvas => ToCanvasRect(selectedEffectRect.Rect.Value),
             _ => deviceClip
@@ -2143,7 +2203,7 @@ public static class EffectorRuntime
         new(rect.Left + offsetX, rect.Top + offsetY, rect.Right + offsetX, rect.Bottom + offsetY);
 
     private static Rect? SelectAuthoritativeEffectRect(Rect? effectClipRect, Rect? hostBounds, Rect? renderBounds) =>
-        SelectAuthoritativeEffectRectCandidate(effectClipRect, hostBounds, renderBounds).Rect;
+        SelectAuthoritativeEffectRectCandidate(new SelectedEffectRect(effectClipRect, EffectRectSource.EffectClipCanvas), hostBounds, renderBounds).Rect;
 
     private static Rect? SelectAuthoritativeEffectRectForHostPreference(
         Rect? effectClipRect,
@@ -2151,19 +2211,24 @@ public static class EffectorRuntime
         Rect? renderBounds,
         bool preferHostBounds,
         Size? unclippedHostSize = null) =>
-        SelectAuthoritativeEffectRectCandidateWithHostPreference(effectClipRect, hostBounds, renderBounds, preferHostBounds, unclippedHostSize).Rect;
+        SelectAuthoritativeEffectRectCandidateWithHostPreference(
+            new SelectedEffectRect(effectClipRect, EffectRectSource.EffectClipCanvas),
+            hostBounds,
+            renderBounds,
+            preferHostBounds,
+            unclippedHostSize).Rect;
 
-    private static SelectedEffectRect SelectAuthoritativeEffectRectCandidate(Rect? effectClipRect, Rect? hostBounds, Rect? renderBounds) =>
+    private static SelectedEffectRect SelectAuthoritativeEffectRectCandidate(SelectedEffectRect effectClipRect, Rect? hostBounds, Rect? renderBounds) =>
         SelectAuthoritativeEffectRectCandidateWithHostPreference(effectClipRect, hostBounds, renderBounds, preferHostBounds: false, unclippedHostSize: null);
 
     private static SelectedEffectRect SelectAuthoritativeEffectRectCandidateWithHostPreference(
-        Rect? effectClipRect,
+        SelectedEffectRect effectClipRect,
         Rect? hostBounds,
         Rect? renderBounds,
         bool preferHostBounds,
         Size? unclippedHostSize)
     {
-        if (TrySelectTightHostBounds(effectClipRect, hostBounds, renderBounds, out var tightHostBounds))
+        if (TrySelectTightHostBounds(effectClipRect.Rect, hostBounds, renderBounds, out var tightHostBounds))
         {
             return new SelectedEffectRect(tightHostBounds, EffectRectSource.HostLogical);
         }
@@ -2171,7 +2236,7 @@ public static class EffectorRuntime
         if (preferHostBounds && hostBounds.HasValue && hostBounds.Value.Width > 0d && hostBounds.Value.Height > 0d)
         {
             var preferredHostBounds = hostBounds.Value;
-            if (TryClipPreferredHostBounds(effectClipRect, preferredHostBounds, unclippedHostSize, out var clippedHostBounds))
+            if (TryClipPreferredHostBounds(effectClipRect.Rect, preferredHostBounds, unclippedHostSize, out var clippedHostBounds))
             {
                 return new SelectedEffectRect(clippedHostBounds, EffectRectSource.HostLogical);
             }
@@ -2179,9 +2244,9 @@ public static class EffectorRuntime
             return new SelectedEffectRect(preferredHostBounds, EffectRectSource.HostLogical);
         }
 
-        if (effectClipRect.HasValue && effectClipRect.Value.Width > 0d && effectClipRect.Value.Height > 0d)
+        if (effectClipRect.Rect.HasValue && effectClipRect.Rect.Value.Width > 0d && effectClipRect.Rect.Value.Height > 0d)
         {
-            return new SelectedEffectRect(effectClipRect, EffectRectSource.EffectClipCanvas);
+            return effectClipRect;
         }
 
         if (hostBounds.HasValue && hostBounds.Value.Width > 0d && hostBounds.Value.Height > 0d)
@@ -2196,6 +2261,62 @@ public static class EffectorRuntime
 
         return default;
     }
+
+    private static SelectedEffectRect NormalizeEffectClipRectCandidate(
+        Rect? effectClipRect,
+        Rect? hostBounds,
+        Rect? renderBounds,
+        SKMatrix totalMatrix,
+        Vector dpi)
+    {
+        if (!effectClipRect.HasValue || effectClipRect.Value.Width <= 0d || effectClipRect.Value.Height <= 0d)
+        {
+            return default;
+        }
+
+        var clip = effectClipRect.Value;
+        var comparisonReference = hostBounds;
+        if (!comparisonReference.HasValue && renderBounds.HasValue && renderBounds.Value.Width > 0d && renderBounds.Value.Height > 0d)
+        {
+            comparisonReference = new Rect(
+                ToLogicalRect(renderBounds.Value, dpi).Left,
+                ToLogicalRect(renderBounds.Value, dpi).Top,
+                ToLogicalRect(renderBounds.Value, dpi).Width,
+                ToLogicalRect(renderBounds.Value, dpi).Height);
+        }
+
+        if (!comparisonReference.HasValue || comparisonReference.Value.Width <= 0d || comparisonReference.Value.Height <= 0d)
+        {
+            return new SelectedEffectRect(clip, EffectRectSource.EffectClipCanvas);
+        }
+
+        var originalLogicalClipSkRect = ToLogicalRect(clip, dpi);
+        var originalLogicalClip = new Rect(
+            originalLogicalClipSkRect.Left,
+            originalLogicalClipSkRect.Top,
+            originalLogicalClipSkRect.Width,
+            originalLogicalClipSkRect.Height);
+        var transformedLogicalClip = TransformLocalClipRectToLogical(clip, totalMatrix, dpi);
+        var originalDistance = ComputeRectDistance(originalLogicalClip, comparisonReference.Value);
+        var transformedDistance = ComputeRectDistance(transformedLogicalClip, comparisonReference.Value);
+
+        return transformedDistance + 4d < originalDistance
+            ? new SelectedEffectRect(transformedLogicalClip, EffectRectSource.EffectClipLogical)
+            : new SelectedEffectRect(clip, EffectRectSource.EffectClipCanvas);
+    }
+
+    private static Rect TransformLocalClipRectToLogical(Rect clip, SKMatrix totalMatrix, Vector dpi)
+    {
+        var transformedCanvasRect = clip.TransformToAABB(ToAvaloniaMatrix(totalMatrix));
+        var logicalRect = ToLogicalRect(transformedCanvasRect, dpi);
+        return new Rect(logicalRect.Left, logicalRect.Top, logicalRect.Width, logicalRect.Height);
+    }
+
+    private static double ComputeRectDistance(Rect left, Rect right) =>
+        Math.Abs(left.X - right.X) +
+        Math.Abs(left.Y - right.Y) +
+        Math.Abs(left.Width - right.Width) +
+        Math.Abs(left.Height - right.Height);
 
     private static bool ShouldPreferHostBounds(IEffect effect, out Size? unclippedHostSize)
     {
@@ -2581,7 +2702,7 @@ public static class EffectorRuntime
             return false;
         }
 
-        var root = TopLevel.GetTopLevel(visual) as Visual ?? visual.GetVisualRoot() as Visual;
+        var root = TopLevel.GetTopLevel(visual) as Visual;
         if (root is null)
         {
             bounds = default;

@@ -134,9 +134,8 @@ internal sealed class AvaloniaPatchMetadataScanner
                 new("Avalonia.Media.EffectExtensions", "ToImmutable", 1),
                 new("Avalonia.Media.Effect", "Parse", 1),
                 new("Avalonia.Animation.EffectTransition", "DoTransition", 3),
-                new("Avalonia.Animation.Animators.EffectAnimator", "Apply", 5),
-                new("Avalonia.Animation.Animators.EffectAnimator", "Interpolate", 3),
-                new("Avalonia.Rendering.Composition.Server.ServerCompositionVisual", "PushEffect", 1)
+                new("Avalonia.Animation.Animators.EffectAnimator", "Apply", 6),
+                new("Avalonia.Animation.Animators.EffectAnimator", "Interpolate", 3)
             ],
             AvaloniaPatchAssemblyKind.Skia =>
             [

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework Condition="'$(PublishAot)' == 'true'">net8.0</TargetFramework>
-    <TargetFrameworks Condition="'$(PublishAot)' != 'true' and '$(TargetFramework)' == ''">net8.0;netstandard2.0</TargetFrameworks>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net8.0</TargetFramework>
     <AssemblyName>Effector</AssemblyName>
     <PackageId>Effector</PackageId>
     <Title>Effector</Title>
@@ -16,7 +16,7 @@
     <_EffectorSelfWeaverProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.SelfWeaver\Effector.SelfWeaver.csproj'))</_EffectorSelfWeaverProjectPath>
     <_EffectorSelfWeaverDllPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.SelfWeaver\bin\$(Configuration)\net8.0\Effector.SelfWeaver.dll'))</_EffectorSelfWeaverDllPath>
     <_EffectorBuildTasksProjectPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.Build.Tasks\Effector.Build.Tasks.csproj'))</_EffectorBuildTasksProjectPath>
-    <_EffectorBuildTasksOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.Build.Tasks\bin\$(Configuration)\netstandard2.0'))</_EffectorBuildTasksOutputDir>
+    <_EffectorBuildTasksOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Effector.Build.Tasks\bin\$(Configuration)\net8.0'))</_EffectorBuildTasksOutputDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -54,18 +54,18 @@
 
   <Target Name="Effector_BuildPackTaskProject"
           Condition="'$(DesignTimeBuild)' != 'true' and '$(NoBuild)' != 'true' and '$(EffectorSkipCustomTargets)' != 'true' and Exists('$(_EffectorBuildTasksProjectPath)')">
-    <Exec Command="dotnet restore &quot;$(_EffectorBuildTasksProjectPath)&quot; --no-dependencies -p:Configuration=$(Configuration) -p:TargetFramework=netstandard2.0 -p:GeneratePackageOnBuild=false -p:DesignTimeBuild=false -p:BuildingProject=false -p:BuildProjectReferences=false -p:EffectorUseBuiltRuntimeReference=true -p:NoBuild=false" />
-    <Exec Command="dotnet msbuild &quot;$(_EffectorBuildTasksProjectPath)&quot; -t:Build -m:1 -p:Configuration=$(Configuration) -p:TargetFramework=netstandard2.0 -p:GeneratePackageOnBuild=false -p:DesignTimeBuild=false -p:BuildingProject=false -p:BuildProjectReferences=false -p:EffectorUseBuiltRuntimeReference=true -p:NoBuild=false -v:minimal" />
+    <Exec Command="dotnet restore &quot;$(_EffectorBuildTasksProjectPath)&quot; --no-dependencies -p:Configuration=$(Configuration) -p:TargetFramework=net8.0 -p:GeneratePackageOnBuild=false -p:DesignTimeBuild=false -p:BuildingProject=false -p:BuildProjectReferences=false -p:EffectorUseBuiltRuntimeReference=true -p:NoBuild=false" />
+    <Exec Command="dotnet msbuild &quot;$(_EffectorBuildTasksProjectPath)&quot; -t:Build -m:1 -p:Configuration=$(Configuration) -p:TargetFramework=net8.0 -p:GeneratePackageOnBuild=false -p:DesignTimeBuild=false -p:BuildingProject=false -p:BuildProjectReferences=false -p:EffectorUseBuiltRuntimeReference=true -p:NoBuild=false -v:minimal" />
   </Target>
 
   <Target Name="Effector_PreparePackTaskPayload"
           AfterTargets="Build"
           DependsOnTargets="Effector_BuildPackTaskProject"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(NoBuild)' != 'true' and '$(EffectorSkipCustomTargets)' != 'true' and '$(EffectorPreparePackPayload)' == 'true' and '$(TargetFramework)' == 'netstandard2.0'" />
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(NoBuild)' != 'true' and '$(EffectorSkipCustomTargets)' != 'true' and '$(EffectorPreparePackPayload)' == 'true' and '$(TargetFramework)' == 'net8.0'" />
 
   <Target Name="Effector_AddBuildTaskPayloadToPackage"
           DependsOnTargets="Effector_BuildSelfWeaver;Effector_BuildPackTaskProject"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(EffectorSkipCustomTargets)' != 'true' and '$(TargetFramework)' == 'netstandard2.0'">
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(EffectorSkipCustomTargets)' != 'true' and '$(TargetFramework)' == 'net8.0'">
     <ItemGroup>
       <TfmSpecificPackageFile Include="$(_EffectorBuildTasksOutputDir)\*.dll">
         <PackagePath>buildTransitive/%(Filename)%(Extension)</PackagePath>

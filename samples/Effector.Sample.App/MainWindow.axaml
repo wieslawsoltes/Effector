@@ -13,7 +13,6 @@
         Title="Effector Gallery"
         FontFamily="avares://Avalonia.Fonts.Inter#Inter"
         ExtendClientAreaToDecorationsHint="True"
-        ExtendClientAreaChromeHints="PreferSystemChrome"
         TransparencyLevelHint="AcrylicBlur"
         mc:Ignorable="d">
   <Window.Background>

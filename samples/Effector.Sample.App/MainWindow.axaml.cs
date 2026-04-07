@@ -74,7 +74,6 @@ public partial class MainWindow : Window
         Title = "Effector Gallery";
         Background = Brushes.White;
         ExtendClientAreaToDecorationsHint = false;
-        ExtendClientAreaChromeHints = ExtendClientAreaChromeHints.Default;
         TransparencyLevelHint = new[] { WindowTransparencyLevel.None };
         BuildHeadlessSafeShell();
     }

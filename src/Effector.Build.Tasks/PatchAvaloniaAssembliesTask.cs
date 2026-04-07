@@ -14,7 +14,7 @@ public sealed class PatchAvaloniaAssembliesTask : Microsoft.Build.Utilities.Task
 
     public bool Verbose { get; set; }
 
-    public string SupportedAvaloniaVersion { get; set; } = "11.3.12";
+    public string SupportedAvaloniaVersion { get; set; } = "12.0.0";
 
     [Output]
     public int PatchedAssemblyCount { get; set; }

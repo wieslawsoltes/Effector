@@ -11,7 +11,7 @@
     <Copyright>Copyright (c) Wieslaw Soltes</Copyright>
     <Product>Effector</Product>
     <Title>Effector</Title>
-    <Description>Extensible Skia-backed custom effects for Avalonia 11.3.12 with metadata-based weaving, patched Avalonia render hooks, runtime shader support, and NativeAOT-aware packaging.</Description>
+    <Description>Extensible Skia-backed custom effects for Avalonia 12.0.0 with metadata-based weaving, patched Avalonia render hooks, runtime shader support, and NativeAOT-aware packaging.</Description>
     <RepositoryUrl>https://github.com/wieslawsoltes/Effector</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -32,8 +32,8 @@
     <RepositoryCommit Condition="'$(RepositoryCommit)' == '' and '$(GITHUB_SHA)' != ''">$(GITHUB_SHA)</RepositoryCommit>
     <VersionPrefix>0.4.0</VersionPrefix>
     <EffectorVersion>0.4.0</EffectorVersion>
-    <AvaloniaVersion>11.3.12</AvaloniaVersion>
-    <SkiaSharpVersion>3.119.2</SkiaSharpVersion>
+    <AvaloniaVersion>12.0.0</AvaloniaVersion>
+    <SkiaSharpVersion>3.119.3-preview.1.1</SkiaSharpVersion>
     <RootNamespace Condition="'$(RootNamespace)' == ''">$(MSBuildProjectName)</RootNamespace>
   </PropertyGroup>
 </Project>
