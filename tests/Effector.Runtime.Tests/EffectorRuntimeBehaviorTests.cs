@@ -426,6 +426,126 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void ShaderCaptureSnapshot_Remains_Usable_After_SourceSurface_Is_Disposed()
+    {
+        var expectedColor = new SKColor(64, 140, 226, 255);
+        SKImage snapshot;
+
+        using (var surface = SKSurface.Create(new SKImageInfo(12, 8)))
+        {
+            Assert.NotNull(surface);
+            surface!.Canvas.Clear(expectedColor);
+            surface.Canvas.Flush();
+            snapshot = surface.Snapshot();
+        }
+
+        using (snapshot)
+        {
+            AssertColorClose(GetPixel(snapshot, 6, 4), expectedColor, tolerance: 4);
+
+            using var outputSurface = SKSurface.Create(new SKImageInfo(12, 8));
+            Assert.NotNull(outputSurface);
+            outputSurface!.Canvas.Clear(SKColors.Transparent);
+            outputSurface.Canvas.DrawImage(snapshot, 0, 0);
+            outputSurface.Canvas.Flush();
+
+            using var rendered = outputSurface.Snapshot();
+            AssertColorClose(GetPixel(rendered, 6, 4), expectedColor, tolerance: 4);
+        }
+    }
+
+    [Fact]
+    public void ShaderEffectFrame_DisposeLayerDrawingContext_Leaves_LayerOwner_Alive_Until_FrameDispose()
+    {
+        using var previousSurface = SKSurface.Create(new SKImageInfo(8, 8));
+        using var captureSurface = SKSurface.Create(new SKImageInfo(8, 8));
+        Assert.NotNull(previousSurface);
+        Assert.NotNull(captureSurface);
+
+        var layerOwner = new TrackingDisposable();
+        var layerDrawingContext = new TrackingDisposable();
+        var frame = new EffectorShaderEffectFrame(
+            new GridShaderEffect(),
+            previousSurface!.Canvas,
+            previousSurface,
+            captureSurface!,
+            layerOwner,
+            layerDrawingContext,
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            new SKRectI(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRectI(0, 0, 8, 8),
+            rawEffectRect: null,
+            previousSurface.Canvas.TotalMatrix,
+            usedRenderThreadBounds: false,
+            usesLocalDrawingCoordinates: true,
+            proxy: null,
+            previousProxyImpl: null);
+
+        try
+        {
+            frame.DisposeLayerDrawingContext();
+            Assert.True(layerDrawingContext.IsDisposed);
+            Assert.False(layerOwner.IsDisposed);
+
+            frame.DisposeLayerDrawingContext();
+            Assert.True(layerDrawingContext.IsDisposed);
+            Assert.False(layerOwner.IsDisposed);
+        }
+        finally
+        {
+            frame.Dispose();
+        }
+
+        Assert.True(layerOwner.IsDisposed);
+    }
+
+    [Fact]
+    public void ShaderEffectFrame_DetachLayerOwner_Defers_OwnerDisposal_Beyond_FrameDispose()
+    {
+        using var previousSurface = SKSurface.Create(new SKImageInfo(8, 8));
+        using var captureSurface = SKSurface.Create(new SKImageInfo(8, 8));
+        Assert.NotNull(previousSurface);
+        Assert.NotNull(captureSurface);
+
+        var layerOwner = new TrackingDisposable();
+        var layerDrawingContext = new TrackingDisposable();
+        var frame = new EffectorShaderEffectFrame(
+            new GridShaderEffect(),
+            previousSurface!.Canvas,
+            previousSurface,
+            captureSurface!,
+            layerOwner,
+            layerDrawingContext,
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            new SKRectI(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRectI(0, 0, 8, 8),
+            rawEffectRect: null,
+            previousSurface.Canvas.TotalMatrix,
+            usedRenderThreadBounds: false,
+            usesLocalDrawingCoordinates: true,
+            proxy: null,
+            previousProxyImpl: null);
+
+        var deferredOwner = frame.DetachLayerOwner();
+        Assert.Same(layerOwner, deferredOwner);
+        Assert.Null(frame.LayerOwner);
+
+        frame.Dispose();
+
+        Assert.True(layerDrawingContext.IsDisposed);
+        Assert.False(layerOwner.IsDisposed);
+
+        deferredOwner!.Dispose();
+        Assert.True(layerOwner.IsDisposed);
+    }
+
+    [Fact]
     public void HostBounds_Updates_Propagate_From_Mutable_Effect_To_Frozen_Effect()
     {
         RunOnUiThread(() =>
