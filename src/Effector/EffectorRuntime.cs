@@ -964,6 +964,7 @@ public static class EffectorRuntime
             }
 
             queue.Enqueue(bounds);
+            while (queue.Count > 2) queue.Dequeue();
         }
     }
 
@@ -980,6 +981,7 @@ public static class EffectorRuntime
             }
 
             queue.Enqueue(proxy);
+            while (queue.Count > 2) queue.Dequeue();
         }
     }
 
@@ -996,6 +998,7 @@ public static class EffectorRuntime
             }
 
             queue.Enqueue(visual);
+            while (queue.Count > 2) queue.Dequeue();
         }
     }
 
