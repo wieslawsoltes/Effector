@@ -23,6 +23,7 @@ namespace Effector;
 public static class EffectorRuntime
 {
     private const string SupportedAvaloniaVersion = "12.0.0";
+    private const int DeferredRenderResourceMaxQueueSize = 64;
     private static readonly TimeSpan DeferredRenderResourceDisposeDelay = TimeSpan.FromMilliseconds(100);
     private static readonly Version? SkiaSharpAssemblyVersion = typeof(SKRuntimeEffect).Assembly.GetName().Version;
     private static readonly bool IsNativeAot = GetIsNativeAot();
@@ -827,6 +828,8 @@ public static class EffectorRuntime
         {
             ShaderDebugInfoByType.Clear();
             RenderThreadEffectBoundsByType.Clear();
+            RenderThreadProxiesByType.Clear();
+            RenderThreadVisualsByType.Clear();
         }
     }
 
@@ -984,6 +987,7 @@ public static class EffectorRuntime
             }
 
             queue.Enqueue(bounds);
+            while (queue.Count > 2) queue.Dequeue();
         }
     }
 
@@ -1000,6 +1004,7 @@ public static class EffectorRuntime
             }
 
             queue.Enqueue(proxy);
+            while (queue.Count > 2) queue.Dequeue();
         }
     }
 
@@ -1016,6 +1021,7 @@ public static class EffectorRuntime
             }
 
             queue.Enqueue(visual);
+            while (queue.Count > 2) queue.Dequeue();
         }
     }
 
@@ -2539,12 +2545,22 @@ public static class EffectorRuntime
     {
         ArgumentNullException.ThrowIfNull(disposable);
 
+        bool forceImmediate;
         lock (DeferredRenderResourceSync)
         {
             DeferredRenderResources.Enqueue(
                 new DeferredRenderResourceEntry(
                     disposable,
                     DateTime.UtcNow + DeferredRenderResourceDisposeDelay));
+            forceImmediate = DeferredRenderResources.Count > DeferredRenderResourceMaxQueueSize;
+        }
+
+        // If the queue has grown beyond the safety cap (e.g. DispatcherTimer paused
+        // during Android app-background), drain immediately to bound memory.
+        if (forceImmediate)
+        {
+            DrainDeferredRenderResources(force: true);
+            return;
         }
 
         // Dispose on the UI dispatcher after the grace period instead of invalidating the host
