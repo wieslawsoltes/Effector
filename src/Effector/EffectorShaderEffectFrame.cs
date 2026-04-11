@@ -7,6 +7,7 @@ namespace Effector;
 internal sealed class EffectorShaderEffectFrame : IDisposable
 {
     private bool _layerDrawingContextDisposed;
+    private IDisposable? _layerOwner;
 
     public EffectorShaderEffectFrame(
         IEffect effect,
@@ -32,7 +33,7 @@ internal sealed class EffectorShaderEffectFrame : IDisposable
         PreviousCanvas = previousCanvas ?? throw new ArgumentNullException(nameof(previousCanvas));
         PreviousSurface = previousSurface;
         Surface = surface ?? throw new ArgumentNullException(nameof(surface));
-        LayerOwner = layerOwner ?? throw new ArgumentNullException(nameof(layerOwner));
+        _layerOwner = layerOwner ?? throw new ArgumentNullException(nameof(layerOwner));
         LayerDrawingContext = layerDrawingContext;
         EffectContext = effectContext;
         DeviceClipBounds = deviceClipBounds;
@@ -56,7 +57,7 @@ internal sealed class EffectorShaderEffectFrame : IDisposable
 
     public SKSurface Surface { get; }
 
-    public IDisposable LayerOwner { get; }
+    public IDisposable? LayerOwner => _layerOwner;
 
     public IDisposable? LayerDrawingContext { get; }
 
@@ -95,9 +96,17 @@ internal sealed class EffectorShaderEffectFrame : IDisposable
         _layerDrawingContextDisposed = true;
     }
 
+    public IDisposable? DetachLayerOwner()
+    {
+        var owner = _layerOwner;
+        _layerOwner = null;
+        return owner;
+    }
+
     public void Dispose()
     {
         DisposeLayerDrawingContext();
-        LayerOwner.Dispose();
+        _layerOwner?.Dispose();
+        _layerOwner = null;
     }
 }

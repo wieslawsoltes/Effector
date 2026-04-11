@@ -1771,18 +1771,25 @@ public static class EffectorRuntime
             frame.Surface.Canvas.Flush();
             TraceShaderPhase(frame.Effect, "end:flush-surface");
             frame.Surface.Flush();
-            TraceShaderPhase(frame.Effect, "end:snapshot");
-            var snapshot = CreateShaderCaptureSnapshot(frame);
+            SKImage? snapshot = null;
             SkiaShaderEffect? shaderEffect = null;
+            IDisposable? deferredLayerOwner = null;
             var deferRenderResourceDispose = false;
-            if (snapshot is null)
-            {
-                TraceShaderPhase(frame.Effect, "end:snapshot-null");
-                frame.Dispose();
-                return false;
-            }
             try
             {
+                TraceShaderPhase(frame.Effect, "end:snapshot");
+                snapshot = CreateShaderCaptureSnapshot(frame);
+                if (snapshot is null)
+                {
+                    TraceShaderPhase(frame.Effect, "end:snapshot-null");
+                    return false;
+                }
+
+                // Once the capture has been materialized as an immutable image, close the
+                // temporary drawing context immediately so animated descendants do not stack
+                // up live capture contexts across subsequent renders.
+                frame.DisposeLayerDrawingContext();
+                TraceShaderPhase(frame.Effect, "end:capture-context-closed");
                 TraceShaderPhase(frame.Effect, "end:snapshot-ok");
                 SaveShaderSnapshot(frame.Effect, snapshot);
                 var contentBounds = ResolveRenderedContentBounds(snapshot, frame.LocalEffectBounds);
@@ -1871,16 +1878,18 @@ public static class EffectorRuntime
             {
                 if (deferRenderResourceDispose)
                 {
+                    deferredLayerOwner = frame.DetachLayerOwner();
                     ScheduleDeferredRenderResources(
-                        new DeferredRenderResourceBundle(shaderEffect, snapshot, frame),
+                        new DeferredRenderResourceBundle(shaderEffect, snapshot, deferredLayerOwner),
                         GetDeferredRenderInvalidationTarget(frame.Effect));
                 }
                 else
                 {
                     shaderEffect?.Dispose();
-                    snapshot.Dispose();
-                    frame.Dispose();
+                    snapshot?.Dispose();
                 }
+
+                frame.Dispose();
             }
         }
         finally
