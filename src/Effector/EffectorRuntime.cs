@@ -600,6 +600,12 @@ public static class EffectorRuntime
         EnsureInitialized();
         EnsureSkiaMetadata(drawingContext);
         TraceShaderGlobalPhase(drawingContext, "end:patched");
+
+        if (ShouldRestoreCanvasForActiveShaderFrame(drawingContext))
+        {
+            return false;
+        }
+
         return TryEndShaderEffect(drawingContext);
     }
 
@@ -1576,6 +1582,22 @@ public static class EffectorRuntime
 
         frame = default!;
         return false;
+    }
+
+    private static bool ShouldRestoreCanvasForActiveShaderFrame(object drawingContext)
+    {
+        if (!TryGetActiveShaderFrame(drawingContext, out var frame))
+        {
+            return false;
+        }
+
+        if (frame.Surface.Canvas.SaveCount <= frame.CaptureCanvasSaveCount)
+        {
+            return false;
+        }
+
+        TraceShaderPhase(frame.Effect, "end:restore-layer");
+        return true;
     }
 
     private static SKMatrix ToSKMatrix(Matrix matrix) =>

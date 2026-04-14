@@ -492,6 +492,7 @@ public partial class MainWindow : Window
         yield return CreateScanlineShaderDefinition();
         yield return CreateGridShaderDefinition();
         yield return CreateSpotlightShaderDefinition();
+        yield return CreateNestedFilterShaderDefinition();
         yield return CreatePointerSpotlightShaderDefinition();
         yield return CreateReactiveGridShaderDefinition();
         yield return CreateWaterRippleShaderDefinition();
@@ -760,6 +761,111 @@ public partial class MainWindow : Window
                     },
                     color => effect.Color = color);
             });
+    }
+
+    private EffectSectionDefinition CreateNestedFilterShaderDefinition()
+    {
+        var effect = new SpotlightShaderEffect
+        {
+            CenterX = 0.78d,
+            CenterY = 0.18d,
+            Radius = 0.52d,
+            Strength = 0.34d,
+            Color = Color.Parse("#FFD26B")
+        };
+
+        var tintColor = Color.Parse("#7FD6FF");
+        var tintStrength = 0.52d;
+        var childTintEffects = new List<TintEffect>();
+
+        TintEffect CreateChildTintEffect()
+        {
+            var childTintEffect = new TintEffect
+            {
+                Color = tintColor,
+                Strength = tintStrength
+            };
+
+            childTintEffects.Add(childTintEffect);
+            return childTintEffect;
+        }
+
+        void UpdateChildTintEffects(Action<TintEffect> apply)
+        {
+            for (var index = 0; index < childTintEffects.Count; index++)
+            {
+                apply(childTintEffects[index]);
+            }
+        }
+
+        return new EffectSectionDefinition(
+            "Nested Filter + Shader",
+            "A child TintEffect stays visible while the parent SpotlightShaderEffect overlays the whole scene. This is the nested filter-under-shader push/pop case that previously broke composition.",
+            effect,
+            """
+            <Border Background="#17232B" Padding="18" CornerRadius="20">
+              <Border.Effect>
+                <effects:SpotlightShaderEffect CenterX="0.78"
+                                              CenterY="0.18"
+                                              Radius="0.52"
+                                              Strength="0.34"
+                                              Color="#FFD26B" />
+              </Border.Effect>
+
+              <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <Border Background="#21313A" CornerRadius="18">
+                  <Border.Effect>
+                    <effects:TintEffect Color="#7FD6FF" Strength="0.52" />
+                  </Border.Effect>
+                  <!-- Child with filter -->
+                </Border>
+
+                <Border Grid.Column="1"
+                        Background="#21313A"
+                        CornerRadius="18">
+                  <!-- Sibling without filter -->
+                </Border>
+              </Grid>
+            </Border>
+            """,
+            panel =>
+            {
+                AddSlider(panel, "Glare Strength", 0d, 1d, effect.Strength, v => effect.Strength = v);
+                AddSlider(panel, "Glare Radius", 0.15d, 1d, effect.Radius, v => effect.Radius = v);
+                AddSlider(panel, "Glare X", 0d, 1d, effect.CenterX, v => effect.CenterX = v);
+                AddSlider(panel, "Tint Strength", 0d, 1d, tintStrength, v =>
+                {
+                    tintStrength = v;
+                    UpdateChildTintEffects(childEffect => childEffect.Strength = v);
+                });
+                AddColorSwatches(
+                    panel,
+                    "Glare",
+                    new[]
+                    {
+                        ("Gold", Color.Parse("#FFD26B")),
+                        ("Rose", Color.Parse("#FF9EC8")),
+                        ("Mint", Color.Parse("#9DFFC2")),
+                        ("Ice", Color.Parse("#B9ECFF"))
+                    },
+                    color => effect.Color = color);
+                AddColorSwatches(
+                    panel,
+                    "Child Tint",
+                    new[]
+                    {
+                        ("Cyan", Color.Parse("#7FD6FF")),
+                        ("Coral", Color.Parse("#FF9D7A")),
+                        ("Lime", Color.Parse("#A7F06C")),
+                        ("Violet", Color.Parse("#B596FF"))
+                    },
+                    color =>
+                    {
+                        tintColor = color;
+                        UpdateChildTintEffects(childEffect => childEffect.Color = color);
+                    });
+            },
+            previewEffect => BuildNestedFilterShaderPreview(previewEffect, CreateChildTintEffect));
     }
 
     private EffectSectionDefinition CreatePointerSpotlightShaderDefinition()
@@ -1241,6 +1347,261 @@ public partial class MainWindow : Window
         }.WithRow(2));
 
         return root;
+    }
+
+    private Control BuildNestedFilterShaderPreview(SkiaEffectBase? effect, Func<TintEffect> createChildTintEffect)
+    {
+        var preview = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("1.15*,0.85*"),
+            ColumnSpacing = 14
+        };
+        _previewContentGrids.Add(preview);
+
+        var previewKind = effect is null ? "Before" : "After";
+        var sceneHost = new Border
+        {
+            CornerRadius = new CornerRadius(18),
+            ClipToBounds = true,
+            Tag = "Nested Filter + Shader::" + previewKind + "::Scene",
+            Child = BuildNestedFilterShaderScene(previewKind, createChildTintEffect())
+        };
+
+        if (effect is IEffect avaloniaEffect)
+        {
+            sceneHost.Effect = avaloniaEffect;
+        }
+
+        preview.Children.Add(sceneHost);
+        preview.Children.Add(
+            new StackPanel
+            {
+                Spacing = 12,
+                Children =
+                {
+                    new Border
+                    {
+                        Padding = new Thickness(14),
+                        CornerRadius = new CornerRadius(14),
+                        Background = new SolidColorBrush(Color.Parse("#FFF9FCFF")),
+                        Child = new StackPanel
+                        {
+                            Spacing = 6,
+                            Children =
+                            {
+                                new TextBlock
+                                {
+                                    Text = previewKind == "Before" ? "Filter only" : "Filter + parent shader",
+                                    FontSize = 18,
+                                    FontWeight = FontWeight.SemiBold,
+                                    Foreground = new SolidColorBrush(Color.Parse("#223033"))
+                                },
+                                new TextBlock
+                                {
+                                    Text = previewKind == "Before"
+                                        ? "The left child already runs TintEffect. The right card stays plain so the baseline is easy to compare."
+                                        : "The same child TintEffect stays active while SpotlightShaderEffect overlays the full scene, including the sibling card.",
+                                    TextWrapping = TextWrapping.Wrap,
+                                    Foreground = new SolidColorBrush(Color.Parse("#5D6C72"))
+                                }
+                            }
+                        }
+                    },
+                    new WrapPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        ItemSpacing = 8,
+                        LineSpacing = 8,
+                        Children =
+                        {
+                            CreateChip("child filter"),
+                            CreateChip("parent shader"),
+                            CreateChip("shared scene")
+                        }
+                    },
+                    CreateStatRow("Tinted child", "visible", "#0E9E88"),
+                    CreateStatRow("Sibling overlay", "shared", "#C9781D"),
+                    CreateStatRow("Composition path", "nested", "#2D6CC1")
+                }
+            }.WithColumn(1));
+
+        return preview;
+    }
+
+    private Control BuildNestedFilterShaderScene(string previewKind, TintEffect childTintEffect)
+    {
+        var root = new Border
+        {
+            Padding = new Thickness(18),
+            CornerRadius = new CornerRadius(18),
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0d, 0d, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1d, 1d, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(Color.Parse("#16232B"), 0d),
+                    new GradientStop(Color.Parse("#233843"), 0.55d),
+                    new GradientStop(Color.Parse("#182129"), 1d)
+                }
+            }
+        };
+
+        var content = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*,Auto"),
+            RowSpacing = 12
+        };
+
+        content.Children.Add(
+            new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                Children =
+                {
+                    new StackPanel
+                    {
+                        Spacing = 4,
+                        Children =
+                        {
+                            new TextBlock
+                            {
+                                Text = "Weather overlay composition",
+                                FontSize = 16,
+                                FontWeight = FontWeight.SemiBold,
+                                Foreground = Brushes.White
+                            },
+                            new TextBlock
+                            {
+                                Text = previewKind == "Before"
+                                    ? "Tinted child card without parent shader"
+                                    : "Tinted child card under parent shader glare",
+                                Foreground = new SolidColorBrush(Color.Parse("#B8C6CF")),
+                                TextWrapping = TextWrapping.Wrap
+                            }
+                        }
+                    },
+                    new Border
+                    {
+                        Padding = new Thickness(10, 6),
+                        CornerRadius = new CornerRadius(999),
+                        Background = new SolidColorBrush(Color.Parse("#22FFD26B")),
+                        Child = new TextBlock
+                        {
+                            Text = previewKind,
+                            Foreground = new SolidColorBrush(Color.Parse("#FFE9B0")),
+                            FontWeight = FontWeight.SemiBold
+                        }
+                    }.WithColumn(1)
+                }
+            });
+
+        content.Children.Add(
+            new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,*"),
+                ColumnSpacing = 12,
+                Children =
+                {
+                    CreateNestedFilterShaderCard(
+                        "Nested Filter + Shader::" + previewKind + "::TintedChild",
+                        "Tinted child",
+                        "TintEffect stays active",
+                        "#7FD6FF",
+                        childTintEffect),
+                    CreateNestedFilterShaderCard(
+                        "Nested Filter + Shader::" + previewKind + "::SiblingChild",
+                        "Sibling card",
+                        "No child filter, same parent scene",
+                        "#FFD26B",
+                        effect: null).WithColumn(1)
+                }
+            }.WithRow(1));
+
+        content.Children.Add(
+            new WrapPanel
+            {
+                Orientation = Orientation.Horizontal,
+                ItemSpacing = 8,
+                LineSpacing = 8,
+                Children =
+                {
+                    CreateChip("scene root"),
+                    CreateChip("tint child"),
+                    CreateChip("sibling")
+                }
+            }.WithRow(2));
+
+        root.Child = content;
+        return root;
+    }
+
+    private static Border CreateNestedFilterShaderCard(string tag, string title, string subtitle, string accentHex, SkiaEffectBase? effect)
+    {
+        var accentColor = Color.Parse(accentHex);
+        var card = new Border
+        {
+            Padding = new Thickness(14),
+            CornerRadius = new CornerRadius(18),
+            Background = new SolidColorBrush(Color.Parse("#F7F3EC")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#35FFFFFF")),
+            BorderThickness = new Thickness(1),
+            Tag = tag,
+            Child = new StackPanel
+            {
+                Spacing = 10,
+                Children =
+                {
+                    new Border
+                    {
+                        Width = 42,
+                        Height = 42,
+                        CornerRadius = new CornerRadius(999),
+                        Background = new SolidColorBrush(accentColor),
+                        Child = new TextBlock
+                        {
+                            Text = title.StartsWith("Tinted", StringComparison.Ordinal) ? "T" : "S",
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            FontWeight = FontWeight.Bold,
+                            Foreground = GetRelativeLuminance(accentColor) > 0.55d ? Brushes.Black : Brushes.White
+                        }
+                    },
+                    new TextBlock
+                    {
+                        Text = title,
+                        FontSize = 16,
+                        FontWeight = FontWeight.SemiBold,
+                        Foreground = new SolidColorBrush(Color.Parse("#223033"))
+                    },
+                    new TextBlock
+                    {
+                        Text = subtitle,
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = new SolidColorBrush(Color.Parse("#5D6C72"))
+                    },
+                    new Border
+                    {
+                        Padding = new Thickness(10, 8),
+                        CornerRadius = new CornerRadius(12),
+                        Background = new SolidColorBrush(Color.Parse("#FFFFFFFF")),
+                        Child = new TextBlock
+                        {
+                            Text = effect is null ? "Parent shader only" : "Child filter + parent shader",
+                            Foreground = new SolidColorBrush(accentColor),
+                            FontWeight = FontWeight.SemiBold
+                        }
+                    }
+                }
+            }
+        };
+
+        if (effect is IEffect avaloniaEffect)
+        {
+            card.Effect = avaloniaEffect;
+        }
+
+        return card;
     }
 
     private static Border CreateChip(string text) =>

@@ -174,6 +174,49 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void MainWindow_Contains_NestedFilterShader_Showcase()
+    {
+        RunOnUiThread(() =>
+        {
+            var window = new MainWindow();
+
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+
+                var section = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .FirstOrDefault(static border => string.Equals(border.Tag as string, "Nested Filter + Shader::Section", StringComparison.Ordinal));
+                Assert.NotNull(section);
+
+                var afterScene = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .FirstOrDefault(static border => string.Equals(border.Tag as string, "Nested Filter + Shader::After::Scene", StringComparison.Ordinal));
+                var tintedChild = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .FirstOrDefault(static border => string.Equals(border.Tag as string, "Nested Filter + Shader::After::TintedChild", StringComparison.Ordinal));
+                var siblingChild = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .FirstOrDefault(static border => string.Equals(border.Tag as string, "Nested Filter + Shader::After::SiblingChild", StringComparison.Ordinal));
+
+                Assert.NotNull(afterScene);
+                Assert.IsType<SpotlightShaderEffect>(afterScene!.Effect);
+
+                Assert.NotNull(tintedChild);
+                Assert.IsType<TintEffect>(tintedChild!.Effect);
+
+                Assert.NotNull(siblingChild);
+                Assert.Null(siblingChild!.Effect);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void CompizCubeTransition_RendersVisibleContent_AtMidProgress()
     {
         if (!EffectorRuntime.DirectRuntimeShadersEnabled)
@@ -558,6 +601,102 @@ public sealed class EffectorRuntimeBehaviorTests
 
         deferredOwner!.Dispose();
         Assert.True(layerOwner.IsDisposed);
+    }
+
+    [Fact]
+    public void ActiveShaderFramePopDetection_Does_Not_Defer_When_CaptureCanvas_Is_At_Baseline()
+    {
+        using var previousSurface = SKSurface.Create(new SKImageInfo(8, 8));
+        using var captureSurface = SKSurface.Create(new SKImageInfo(8, 8));
+        Assert.NotNull(previousSurface);
+        Assert.NotNull(captureSurface);
+
+        var frame = new EffectorShaderEffectFrame(
+            new GridShaderEffect(),
+            previousSurface!.Canvas,
+            previousSurface,
+            captureSurface!,
+            new TestDisposable(),
+            layerDrawingContext: null,
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            new SKRectI(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRectI(0, 0, 8, 8),
+            rawEffectRect: null,
+            previousSurface.Canvas.TotalMatrix,
+            usedRenderThreadBounds: false,
+            usesLocalDrawingCoordinates: true,
+            proxy: null,
+            previousProxyImpl: null);
+
+        var drawingContext = new object();
+        var shaderFrames = GetShaderFrames();
+        shaderFrames[drawingContext] = new Stack<EffectorShaderEffectFrame>(new[] { frame });
+
+        try
+        {
+            Assert.Equal(captureSurface.Canvas.SaveCount, frame.CaptureCanvasSaveCount);
+            Assert.False(ShouldRestoreCanvasForActiveShaderFrame(drawingContext));
+        }
+        finally
+        {
+            shaderFrames.Remove(drawingContext);
+            frame.Dispose();
+        }
+    }
+
+    [Fact]
+    public void ActiveShaderFramePopDetection_Defers_To_RestoreCanvas_When_Nested_Filter_Layer_Is_Open()
+    {
+        using var previousSurface = SKSurface.Create(new SKImageInfo(8, 8));
+        using var captureSurface = SKSurface.Create(new SKImageInfo(8, 8));
+        Assert.NotNull(previousSurface);
+        Assert.NotNull(captureSurface);
+
+        var frame = new EffectorShaderEffectFrame(
+            new GridShaderEffect(),
+            previousSurface!.Canvas,
+            previousSurface,
+            captureSurface!,
+            new TestDisposable(),
+            layerDrawingContext: null,
+            new SkiaEffectContext(1d, usesOpacitySaveLayer: false),
+            new SKRectI(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRect(0, 0, 8, 8),
+            new SKRectI(0, 0, 8, 8),
+            rawEffectRect: null,
+            previousSurface.Canvas.TotalMatrix,
+            usedRenderThreadBounds: false,
+            usesLocalDrawingCoordinates: true,
+            proxy: null,
+            previousProxyImpl: null);
+
+        var drawingContext = new object();
+        var shaderFrames = GetShaderFrames();
+        shaderFrames[drawingContext] = new Stack<EffectorShaderEffectFrame>(new[] { frame });
+
+        using var paint = new SKPaint();
+
+        try
+        {
+            captureSurface.Canvas.SaveLayer(paint);
+            Assert.True(captureSurface.Canvas.SaveCount > frame.CaptureCanvasSaveCount);
+            Assert.True(ShouldRestoreCanvasForActiveShaderFrame(drawingContext));
+        }
+        finally
+        {
+            if (captureSurface.Canvas.SaveCount > frame.CaptureCanvasSaveCount)
+            {
+                captureSurface.Canvas.Restore();
+            }
+
+            shaderFrames.Remove(drawingContext);
+            frame.Dispose();
+        }
     }
 
     [Fact]
@@ -3447,6 +3586,22 @@ public sealed class EffectorRuntimeBehaviorTests
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         Assert.NotNull(field);
         return (T)field!.GetValue(instance)!;
+    }
+
+    private static Dictionary<object, Stack<EffectorShaderEffectFrame>> GetShaderFrames()
+    {
+        var shaderFramesField = typeof(EffectorRuntime).GetField(
+            "ShaderFrames",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        return (Dictionary<object, Stack<EffectorShaderEffectFrame>>)shaderFramesField.GetValue(null)!;
+    }
+
+    private static bool ShouldRestoreCanvasForActiveShaderFrame(object drawingContext)
+    {
+        var method = typeof(EffectorRuntime).GetMethod(
+            "ShouldRestoreCanvasForActiveShaderFrame",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        return (bool)method.Invoke(null, new[] { drawingContext })!;
     }
 
     private static Rect GetStoredHostBounds(IEffect effect)
