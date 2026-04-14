@@ -174,6 +174,49 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void MainWindow_Contains_NestedFilterShader_Showcase()
+    {
+        RunOnUiThread(() =>
+        {
+            var window = new MainWindow();
+
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+
+                var section = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .FirstOrDefault(static border => string.Equals(border.Tag as string, "Nested Filter + Shader::Section", StringComparison.Ordinal));
+                Assert.NotNull(section);
+
+                var afterScene = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .FirstOrDefault(static border => string.Equals(border.Tag as string, "Nested Filter + Shader::After::Scene", StringComparison.Ordinal));
+                var tintedChild = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .FirstOrDefault(static border => string.Equals(border.Tag as string, "Nested Filter + Shader::After::TintedChild", StringComparison.Ordinal));
+                var siblingChild = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .FirstOrDefault(static border => string.Equals(border.Tag as string, "Nested Filter + Shader::After::SiblingChild", StringComparison.Ordinal));
+
+                Assert.NotNull(afterScene);
+                Assert.IsType<SpotlightShaderEffect>(afterScene!.Effect);
+
+                Assert.NotNull(tintedChild);
+                Assert.IsType<TintEffect>(tintedChild!.Effect);
+
+                Assert.NotNull(siblingChild);
+                Assert.Null(siblingChild!.Effect);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void CompizCubeTransition_RendersVisibleContent_AtMidProgress()
     {
         if (!EffectorRuntime.DirectRuntimeShadersEnabled)
