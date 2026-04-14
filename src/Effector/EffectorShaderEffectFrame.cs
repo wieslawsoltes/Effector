@@ -33,6 +33,7 @@ internal sealed class EffectorShaderEffectFrame : IDisposable
         PreviousCanvas = previousCanvas ?? throw new ArgumentNullException(nameof(previousCanvas));
         PreviousSurface = previousSurface;
         Surface = surface ?? throw new ArgumentNullException(nameof(surface));
+        CaptureCanvasSaveCount = Surface.Canvas.SaveCount;
         _layerOwner = layerOwner ?? throw new ArgumentNullException(nameof(layerOwner));
         LayerDrawingContext = layerDrawingContext;
         EffectContext = effectContext;
@@ -56,6 +57,8 @@ internal sealed class EffectorShaderEffectFrame : IDisposable
     public SKSurface? PreviousSurface { get; }
 
     public SKSurface Surface { get; }
+
+    public int CaptureCanvasSaveCount { get; }
 
     public IDisposable? LayerOwner => _layerOwner;
 
