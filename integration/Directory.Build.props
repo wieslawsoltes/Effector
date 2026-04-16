@@ -1,6 +1,6 @@
 <Project>
   <Import Project="..\Directory.Build.props" />
   <PropertyGroup>
-    <EffectorPackageVersion Condition="'$(EffectorPackageVersion)' == ''">0.9.0</EffectorPackageVersion>
+    <EffectorPackageVersion Condition="'$(EffectorPackageVersion)' == ''">0.9.1</EffectorPackageVersion>
   </PropertyGroup>
 </Project>
