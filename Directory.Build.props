@@ -30,8 +30,8 @@
     <PackageOutputPath Condition="'$(PackageOutputPath)' == '' and '$(IsPackable)' == 'true'">$([System.IO.Path]::Combine('$(MSBuildThisFileDirectory)', 'artifacts', 'packages'))</PackageOutputPath>
     <RepositoryBranch Condition="'$(RepositoryBranch)' == '' and '$(GITHUB_REF_NAME)' != ''">$(GITHUB_REF_NAME)</RepositoryBranch>
     <RepositoryCommit Condition="'$(RepositoryCommit)' == '' and '$(GITHUB_SHA)' != ''">$(GITHUB_SHA)</RepositoryCommit>
-    <VersionPrefix>0.9.1</VersionPrefix>
-    <EffectorVersion>0.9.1</EffectorVersion>
+    <VersionPrefix>0.9.2</VersionPrefix>
+    <EffectorVersion>0.9.2</EffectorVersion>
     <AvaloniaVersion>12.0.0</AvaloniaVersion>
     <SkiaSharpVersion>3.119.3-preview.1.1</SkiaSharpVersion>
     <RootNamespace Condition="'$(RootNamespace)' == ''">$(MSBuildProjectName)</RootNamespace>
