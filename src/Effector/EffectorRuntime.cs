@@ -215,7 +215,8 @@ public static class EffectorRuntime
             return envOverride.Value;
         }
 
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            && !OperatingSystem.IsAndroid();
     }
 
     public static void EnsureInitialized()
