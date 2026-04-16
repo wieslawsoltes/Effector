@@ -4,5 +4,6 @@
     <EffectorStrict Condition="'$(EffectorStrict)' == ''">true</EffectorStrict>
     <EffectorVerbose Condition="'$(EffectorVerbose)' == ''">false</EffectorVerbose>
     <EffectorSupportedAvaloniaVersion Condition="'$(EffectorSupportedAvaloniaVersion)' == ''">12.0.0</EffectorSupportedAvaloniaVersion>
+    <EffectorPatchBrowserWasmAssemblies Condition="'$(EffectorPatchBrowserWasmAssemblies)' == ''">true</EffectorPatchBrowserWasmAssemblies>
   </PropertyGroup>
 </Project>
