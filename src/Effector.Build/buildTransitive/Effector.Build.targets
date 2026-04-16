@@ -9,6 +9,8 @@
     <_EffectorTaskAssemblyPath Condition="'$(_EffectorTaskAssemblyPath)' == '' and Exists('$(_EffectorPackagedTaskAssemblyPath)')">$(_EffectorPackagedTaskAssemblyPath)</_EffectorTaskAssemblyPath>
     <_EffectorTaskAssemblyPath Condition="'$(_EffectorTaskAssemblyPath)' == '' and Exists('$(_EffectorLocalTaskProjectPath)')">$(_EffectorLocalTaskAssemblyPath)</_EffectorTaskAssemblyPath>
     <_EffectorAndroidAssetsDir Condition="'$(_EffectorAndroidAssetsDir)' == ''">$([System.IO.Path]::Combine('$(IntermediateOutputPath)', 'android', 'assets'))</_EffectorAndroidAssetsDir>
+    <_EffectorIsBrowserWasm Condition="'$(_EffectorIsBrowserWasm)' == '' and ('$(RuntimeIdentifier)' == 'browser-wasm' or $([System.String]::Copy('$(TargetFramework)').EndsWith('-browser')))">true</_EffectorIsBrowserWasm>
+    <_EffectorBrowserPatchedAssemblyDir Condition="'$(_EffectorBrowserPatchedAssemblyDir)' == ''">$([System.IO.Path]::Combine('$(IntermediateOutputPath)', 'effector-browser-patched'))</_EffectorBrowserPatchedAssemblyDir>
   </PropertyGroup>
 
   <UsingTask TaskName="Effector.Build.Tasks.WeaveSkiaEffectsTask"
@@ -47,10 +49,76 @@
                           SupportedAvaloniaVersion="$(EffectorSupportedAvaloniaVersion)" />
   </Target>
 
+  <Target Name="Effector_PatchAvaloniaBrowserReferenceInputs"
+          AfterTargets="ResolveReferences"
+          BeforeTargets="ResolveBuildRelatedStaticWebAssets;CopyFilesToOutputDirectory;ComputeFilesToPublish;StaticWebAssetsPrepareForPublish"
+          DependsOnTargets="Effector_BuildLocalTask"
+          Condition="'$(EffectorEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(_EffectorIsBrowserWasm)' == 'true' and '$(EffectorPatchBrowserWasmAssemblies)' == 'true'">
+    <ItemGroup>
+      <_EffectorBrowserAvaloniaReference Include="@(ReferenceCopyLocalPaths)"
+                                         Condition="('%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)' == 'Avalonia.Base.dll' or '%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)' == 'Avalonia.Skia.dll')">
+        <EffectorPatchedPath>$([System.IO.Path]::Combine('$(_EffectorBrowserPatchedAssemblyDir)', '%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)'))</EffectorPatchedPath>
+        <EffectorPdbSourcePath>$([System.IO.Path]::Combine('%(ReferenceCopyLocalPaths.RootDir)%(ReferenceCopyLocalPaths.Directory)', '%(ReferenceCopyLocalPaths.Filename).pdb'))</EffectorPdbSourcePath>
+        <EffectorPatchedPdbPath>$([System.IO.Path]::Combine('$(_EffectorBrowserPatchedAssemblyDir)', '%(ReferenceCopyLocalPaths.Filename).pdb'))</EffectorPatchedPdbPath>
+      </_EffectorBrowserAvaloniaReference>
+      <_EffectorBrowserAvaloniaBase Include="@(_EffectorBrowserAvaloniaReference)"
+                                    Condition="'%(_EffectorBrowserAvaloniaReference.Filename)%(_EffectorBrowserAvaloniaReference.Extension)' == 'Avalonia.Base.dll'" />
+      <_EffectorBrowserAvaloniaSkia Include="@(_EffectorBrowserAvaloniaReference)"
+                                    Condition="'%(_EffectorBrowserAvaloniaReference.Filename)%(_EffectorBrowserAvaloniaReference.Extension)' == 'Avalonia.Skia.dll'" />
+      <_EffectorBrowserAvaloniaReferenceToStage Include="@(_EffectorBrowserAvaloniaReference)"
+                                                Condition="'%(_EffectorBrowserAvaloniaReference.Identity)' != '%(_EffectorBrowserAvaloniaReference.EffectorPatchedPath)'" />
+    </ItemGroup>
+
+    <Error Condition="'@(_EffectorBrowserAvaloniaBase->Count())' != '1'"
+           Text="[Effector.Build] Browser-wasm patching expected exactly one Avalonia.Base.dll in @(ReferenceCopyLocalPaths), but found '@(_EffectorBrowserAvaloniaBase->Count())'." />
+    <Error Condition="'@(_EffectorBrowserAvaloniaSkia->Count())' != '1'"
+           Text="[Effector.Build] Browser-wasm patching expected exactly one Avalonia.Skia.dll in @(ReferenceCopyLocalPaths), but found '@(_EffectorBrowserAvaloniaSkia->Count())'." />
+
+    <Message Importance="High"
+             Text="[Effector.Build] patching browser-wasm Avalonia inputs from '%(_EffectorBrowserAvaloniaBase.Identity)' and '%(_EffectorBrowserAvaloniaSkia.Identity)' into '$(_EffectorBrowserPatchedAssemblyDir)'."
+             Condition="'$(EffectorVerbose)' == 'true'" />
+
+    <MakeDir Directories="$(_EffectorBrowserPatchedAssemblyDir)" />
+
+    <Copy SourceFiles="@(_EffectorBrowserAvaloniaReferenceToStage)"
+          DestinationFiles="@(_EffectorBrowserAvaloniaReferenceToStage->'%(EffectorPatchedPath)')"
+          SkipUnchangedFiles="false"
+          OverwriteReadOnlyFiles="true"
+          Condition="'@(_EffectorBrowserAvaloniaReferenceToStage)' != ''" />
+
+    <ItemGroup>
+      <_EffectorBrowserAvaloniaPdb Include="@(_EffectorBrowserAvaloniaReference)"
+                                   Condition="Exists('%(_EffectorBrowserAvaloniaReference.EffectorPdbSourcePath)')" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(_EffectorBrowserAvaloniaPdb->'%(EffectorPdbSourcePath)')"
+          DestinationFiles="@(_EffectorBrowserAvaloniaPdb->'%(EffectorPatchedPdbPath)')"
+          SkipUnchangedFiles="false"
+          OverwriteReadOnlyFiles="true"
+          Condition="'@(_EffectorBrowserAvaloniaPdb)' != '' and '@(_EffectorBrowserAvaloniaReferenceToStage)' != ''" />
+
+    <PatchAvaloniaAssembliesTask AvaloniaBaseAssemblyPath="%(_EffectorBrowserAvaloniaBase.EffectorPatchedPath)"
+                                 AvaloniaSkiaAssemblyPath="%(_EffectorBrowserAvaloniaSkia.EffectorPatchedPath)"
+                                 Strict="$(EffectorStrict)"
+                                 Verbose="$(EffectorVerbose)"
+                                 SupportedAvaloniaVersion="$(EffectorSupportedAvaloniaVersion)" />
+
+    <ItemGroup>
+      <_EffectorBrowserPatchedReference Include="@(_EffectorBrowserAvaloniaReference->'%(EffectorPatchedPath)')"
+                                        KeepMetadata="DestinationSubDirectory;DestinationSubPath;AssetType;Private;CopyToPublishDirectory;CopyToOutputDirectory;NuGetPackageId;NuGetPackageVersion;NuGetSourceType;PackageName;ReferenceSourceTarget;HintPath;ResolvedFrom;FusionName;PathInPackage;ExternallyResolved;RuntimeIdentifier;Culture;MSBuildSourceProjectFile;MSBuildSourceTargetName;OriginalItemSpec;TargetPath">
+        <EffectorOriginalItemSpec>%(_EffectorBrowserAvaloniaReference.Identity)</EffectorOriginalItemSpec>
+      </_EffectorBrowserPatchedReference>
+      <ReferenceCopyLocalPaths Remove="@(_EffectorBrowserAvaloniaReference)" />
+      <ReferenceCopyLocalPaths Include="@(_EffectorBrowserPatchedReference)" />
+      <FileWrites Include="@(_EffectorBrowserAvaloniaReference->'%(EffectorPatchedPath)')" />
+      <FileWrites Include="@(_EffectorBrowserAvaloniaPdb->'%(EffectorPatchedPdbPath)')" Condition="'@(_EffectorBrowserAvaloniaPdb)' != ''" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="Effector_PatchAvaloniaOutputAssemblies"
           AfterTargets="CopyFilesToOutputDirectory"
           DependsOnTargets="Effector_BuildLocalTask"
-          Condition="'$(EffectorEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(TargetDir)' != ''">
+          Condition="'$(EffectorEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(_EffectorIsBrowserWasm)' != 'true' and '$(TargetDir)' != ''">
     <PatchAvaloniaAssembliesTask AvaloniaBaseAssemblyPath="$([System.IO.Path]::Combine('$(TargetDir)', 'Avalonia.Base.dll'))"
                                  AvaloniaSkiaAssemblyPath="$([System.IO.Path]::Combine('$(TargetDir)', 'Avalonia.Skia.dll'))"
                                  Strict="$(EffectorStrict)"
@@ -118,7 +186,7 @@
   <Target Name="Effector_PatchAvaloniaPublishAssemblies"
           AfterTargets="Publish"
           DependsOnTargets="Effector_BuildLocalTask"
-          Condition="'$(EffectorEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(PublishDir)' != ''">
+          Condition="'$(EffectorEnabled)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(_EffectorIsBrowserWasm)' != 'true' and '$(PublishDir)' != ''">
     <PatchAvaloniaAssembliesTask AvaloniaBaseAssemblyPath="$([System.IO.Path]::Combine('$(PublishDir)', 'Avalonia.Base.dll'))"
                                  AvaloniaSkiaAssemblyPath="$([System.IO.Path]::Combine('$(PublishDir)', 'Avalonia.Skia.dll'))"
                                  Strict="$(EffectorStrict)"

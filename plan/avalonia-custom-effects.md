@@ -127,7 +127,7 @@ The produced package includes:
 
 Output package:
 
-- `src/Effector/bin/Debug/Effector.0.9.1.nupkg`
+- `src/Effector/bin/Debug/Effector.0.9.2.nupkg`
 
 ## Sample Deliverables
 
