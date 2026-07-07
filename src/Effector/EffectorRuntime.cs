@@ -14,6 +14,7 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SkiaSharp;
 
@@ -32,6 +33,7 @@ public static class EffectorRuntime
 
     private static readonly object Sync = new();
     private static readonly object DeferredRenderResourceSync = new();
+    private static readonly object DeferredRenderResourceAccessSync = new();
     private static readonly Dictionary<Type, EffectorEffectDescriptor> Descriptors = new();
     private static readonly Dictionary<string, EffectorEffectDescriptor> DescriptorsByName = new(StringComparer.Ordinal);
     private static readonly Dictionary<object, Stack<EffectorShaderEffectFrame>> ShaderFrames = new();
@@ -80,18 +82,15 @@ public static class EffectorRuntime
 
     private sealed class DeferredRenderResourceEntry
     {
-        public DeferredRenderResourceEntry(IDisposable disposable, DateTime dueAtUtc, int managedThreadId)
+        public DeferredRenderResourceEntry(IDisposable disposable, DateTime dueAtUtc)
         {
             Disposable = disposable;
             DueAtUtc = dueAtUtc;
-            ManagedThreadId = managedThreadId;
         }
 
         public IDisposable Disposable { get; }
 
         public DateTime DueAtUtc { get; }
-
-        public int ManagedThreadId { get; }
     }
 
     private sealed class DeferredRenderResourceBundle : IDisposable
@@ -1812,129 +1811,132 @@ public static class EffectorRuntime
 
         try
         {
-            TraceShaderPhase(frame.Effect, "end:flush-canvas");
-            frame.Surface.Canvas.Flush();
-            TraceShaderPhase(frame.Effect, "end:flush-surface");
-            frame.Surface.Flush();
-            SKImage? snapshot = null;
-            SkiaShaderEffect? shaderEffect = null;
-            IDisposable? deferredLayerOwner = null;
-            var deferRenderResourceDispose = false;
-            try
+            lock (DeferredRenderResourceAccessSync)
             {
-                TraceShaderPhase(frame.Effect, "end:snapshot");
-                snapshot = CreateShaderCaptureSnapshot(frame);
-                if (snapshot is null)
-                {
-                    TraceShaderPhase(frame.Effect, "end:snapshot-null");
-                    return false;
-                }
-
-                // Once the capture has been materialized as an immutable image, close the
-                // temporary drawing context immediately so animated descendants do not stack
-                // up live capture contexts across subsequent renders.
-                frame.DisposeLayerDrawingContext();
-                TraceShaderPhase(frame.Effect, "end:capture-context-closed");
-                TraceShaderPhase(frame.Effect, "end:snapshot-ok");
-                SaveShaderSnapshot(frame.Effect, snapshot);
-                var contentBounds = frame.LocalEffectBounds;
-                var globalContentBounds = OffsetRect(
-                    contentBounds,
-                    frame.IntermediateSurfaceBounds.Left,
-                    frame.IntermediateSurfaceBounds.Top);
-                TraceShaderFrame(
-                    frame.Effect,
-                    frame.EffectBounds,
-                    frame.DeviceEffectBounds,
-                    frame.RawEffectRect,
-                    frame.DeviceClipBounds,
-                    frame.IntermediateSurfaceBounds,
-                    contentBounds,
-                    globalContentBounds,
-                    frame.UsedRenderThreadBounds,
-                    frame.TotalMatrix,
-                    frame.UsesLocalDrawingCoordinates);
-                if (TryGetDescriptor(frame.Effect.GetType(), out var debugDescriptor) && debugDescriptor is not null)
-                {
-                    StoreShaderDebugInfo(
-                        debugDescriptor,
-                        frame.Effect,
-                        new EffectorShaderDebugInfo(
-                            frame.EffectBounds,
-                            frame.DeviceClipBounds,
-                            frame.RawEffectRect,
-                            frame.TotalMatrix,
-                            frame.UsedRenderThreadBounds,
-                            frame.IntermediateSurfaceBounds));
-                }
-                var overlayContentBounds = contentBounds;
-                var normalizedOverlayBounds = NormalizeRectToOrigin(overlayContentBounds);
-                var overlayDestinationBounds = OffsetRect(
-                    normalizedOverlayBounds,
-                    frame.IntermediateSurfaceBounds.Left + overlayContentBounds.Left,
-                    frame.IntermediateSurfaceBounds.Top + overlayContentBounds.Top);
-                var shaderContext = new SkiaShaderEffectContext(
-                    frame.EffectContext,
-                    snapshot,
-                    SKRect.Create(snapshot.Width, snapshot.Height),
-                    normalizedOverlayBounds);
-
-                shaderEffect = TryCreateShaderEffect(frame.Effect, shaderContext, out var created)
-                    ? created
-                    : null;
-
-                var restoreCount = frame.PreviousCanvas.Save();
+                TraceShaderPhase(frame.Effect, "end:flush-canvas");
+                frame.Surface.Canvas.Flush();
+                TraceShaderPhase(frame.Effect, "end:flush-surface");
+                frame.Surface.Flush();
+                SKImage? snapshot = null;
+                SkiaShaderEffect? shaderEffect = null;
+                IDisposable? deferredLayerOwner = null;
+                var deferRenderResourceDispose = false;
                 try
                 {
-                    TraceShaderPhase(frame.Effect, "end:base-reset");
-                    frame.PreviousCanvas.ResetMatrix();
-                    frame.PreviousCanvas.ClipRect(frame.DeviceEffectBounds);
-                    TraceShaderPhase(frame.Effect, "end:base-draw-image");
-                    frame.PreviousCanvas.DrawImage(snapshot, frame.IntermediateSurfaceBounds.Left, frame.IntermediateSurfaceBounds.Top);
-
-                    if (shaderEffect is not null)
+                    TraceShaderPhase(frame.Effect, "end:snapshot");
+                    snapshot = CreateShaderCaptureSnapshot(frame);
+                    if (snapshot is null)
                     {
-                        TraceShaderPhase(frame.Effect, "end:overlay");
-                        var usedRuntimeShader = DrawMaskedShaderOverlay(
-                            drawingContext,
-                            frame.PreviousCanvas,
-                            snapshot,
-                            shaderEffect,
-                            normalizedOverlayBounds,
-                            normalizedOverlayBounds,
-                            overlayDestinationBounds,
-                            new SKPoint(-overlayContentBounds.Left, -overlayContentBounds.Top));
-                        if (usedRuntimeShader)
-                        {
-                            TraceShaderPhase(frame.Effect, "end:flush-output-canvas");
-                            frame.PreviousCanvas.Flush();
-                            frame.PreviousSurface?.Flush();
-                        }
-                        TraceShaderPhase(frame.Effect, "end:overlay-done");
+                        TraceShaderPhase(frame.Effect, "end:snapshot-null");
+                        return false;
                     }
 
-                    deferRenderResourceDispose = true;
+                    // Once the capture has been materialized as an immutable image, close the
+                    // temporary drawing context immediately so animated descendants do not stack
+                    // up live capture contexts across subsequent renders.
+                    frame.DisposeLayerDrawingContext();
+                    TraceShaderPhase(frame.Effect, "end:capture-context-closed");
+                    TraceShaderPhase(frame.Effect, "end:snapshot-ok");
+                    SaveShaderSnapshot(frame.Effect, snapshot);
+                    var contentBounds = frame.LocalEffectBounds;
+                    var globalContentBounds = OffsetRect(
+                        contentBounds,
+                        frame.IntermediateSurfaceBounds.Left,
+                        frame.IntermediateSurfaceBounds.Top);
+                    TraceShaderFrame(
+                        frame.Effect,
+                        frame.EffectBounds,
+                        frame.DeviceEffectBounds,
+                        frame.RawEffectRect,
+                        frame.DeviceClipBounds,
+                        frame.IntermediateSurfaceBounds,
+                        contentBounds,
+                        globalContentBounds,
+                        frame.UsedRenderThreadBounds,
+                        frame.TotalMatrix,
+                        frame.UsesLocalDrawingCoordinates);
+                    if (TryGetDescriptor(frame.Effect.GetType(), out var debugDescriptor) && debugDescriptor is not null)
+                    {
+                        StoreShaderDebugInfo(
+                            debugDescriptor,
+                            frame.Effect,
+                            new EffectorShaderDebugInfo(
+                                frame.EffectBounds,
+                                frame.DeviceClipBounds,
+                                frame.RawEffectRect,
+                                frame.TotalMatrix,
+                                frame.UsedRenderThreadBounds,
+                                frame.IntermediateSurfaceBounds));
+                    }
+                    var overlayContentBounds = contentBounds;
+                    var normalizedOverlayBounds = NormalizeRectToOrigin(overlayContentBounds);
+                    var overlayDestinationBounds = OffsetRect(
+                        normalizedOverlayBounds,
+                        frame.IntermediateSurfaceBounds.Left + overlayContentBounds.Left,
+                        frame.IntermediateSurfaceBounds.Top + overlayContentBounds.Top);
+                    var shaderContext = new SkiaShaderEffectContext(
+                        frame.EffectContext,
+                        snapshot,
+                        SKRect.Create(snapshot.Width, snapshot.Height),
+                        normalizedOverlayBounds);
+
+                    shaderEffect = TryCreateShaderEffect(frame.Effect, shaderContext, out var created)
+                        ? created
+                        : null;
+
+                    var restoreCount = frame.PreviousCanvas.Save();
+                    try
+                    {
+                        TraceShaderPhase(frame.Effect, "end:base-reset");
+                        frame.PreviousCanvas.ResetMatrix();
+                        frame.PreviousCanvas.ClipRect(frame.DeviceEffectBounds);
+                        TraceShaderPhase(frame.Effect, "end:base-draw-image");
+                        frame.PreviousCanvas.DrawImage(snapshot, frame.IntermediateSurfaceBounds.Left, frame.IntermediateSurfaceBounds.Top);
+
+                        if (shaderEffect is not null)
+                        {
+                            TraceShaderPhase(frame.Effect, "end:overlay");
+                            var usedRuntimeShader = DrawMaskedShaderOverlay(
+                                drawingContext,
+                                frame.PreviousCanvas,
+                                snapshot,
+                                shaderEffect,
+                                normalizedOverlayBounds,
+                                normalizedOverlayBounds,
+                                overlayDestinationBounds,
+                                new SKPoint(-overlayContentBounds.Left, -overlayContentBounds.Top));
+                            if (usedRuntimeShader)
+                            {
+                                TraceShaderPhase(frame.Effect, "end:flush-output-canvas");
+                                frame.PreviousCanvas.Flush();
+                                frame.PreviousSurface?.Flush();
+                            }
+                            TraceShaderPhase(frame.Effect, "end:overlay-done");
+                        }
+
+                        deferRenderResourceDispose = true;
+                    }
+                    finally
+                    {
+                        frame.PreviousCanvas.RestoreToCount(restoreCount);
+                    }
                 }
                 finally
                 {
-                    frame.PreviousCanvas.RestoreToCount(restoreCount);
-                }
-            }
-            finally
-            {
-                if (deferRenderResourceDispose)
-                {
-                    deferredLayerOwner = frame.DetachLayerOwner();
-                    ScheduleDeferredRenderResources(
-                        new DeferredRenderResourceBundle(shaderEffect, snapshot, deferredLayerOwner));
-                }
-                else
-                {
-                    shaderEffect?.Dispose();
-                    snapshot?.Dispose();
-                }
+                    if (deferRenderResourceDispose)
+                    {
+                        deferredLayerOwner = frame.DetachLayerOwner();
+                        ScheduleDeferredRenderResources(
+                            new DeferredRenderResourceBundle(shaderEffect, snapshot, deferredLayerOwner));
+                    }
+                    else
+                    {
+                        shaderEffect?.Dispose();
+                        snapshot?.Dispose();
+                    }
 
-                frame.Dispose();
+                    frame.Dispose();
+                }
             }
         }
         finally
@@ -2570,15 +2572,29 @@ public static class EffectorRuntime
             DeferredRenderResources.Enqueue(
                 new DeferredRenderResourceEntry(
                     disposable,
-                    DateTime.UtcNow + DeferredRenderResourceDisposeDelay,
-                    Environment.CurrentManagedThreadId));
+                    DateTime.UtcNow + DeferredRenderResourceDisposeDelay));
         }
+
+        // Schedule a delayed cleanup pass so the final static shader frame does not remain
+        // queued indefinitely. The actual dispose path is serialized with shader drawing below.
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            DispatcherTimer.RunOnce(
+                static () => DrainDeferredRenderResources(force: false),
+                DeferredRenderResourceDisposeDelay);
+            return;
+        }
+
+        Dispatcher.UIThread.Post(
+            static () => DispatcherTimer.RunOnce(
+                static () => DrainDeferredRenderResources(force: false),
+                DeferredRenderResourceDisposeDelay),
+            DispatcherPriority.Background);
     }
 
     private static void DrainDeferredRenderResources(bool force)
     {
         List<IDisposable>? ready = null;
-        var currentManagedThreadId = Environment.CurrentManagedThreadId;
 
         lock (DeferredRenderResourceSync)
         {
@@ -2587,10 +2603,7 @@ public static class EffectorRuntime
             for (var index = 0; index < count; index++)
             {
                 var entry = DeferredRenderResources.Dequeue();
-                // GPU-backed Skia objects are disposed only on the thread that scheduled them.
-                // A forced drain is reserved for controlled teardown and tests.
-                if ((force || entry.DueAtUtc <= now) &&
-                    (force || entry.ManagedThreadId == currentManagedThreadId))
+                if (force || entry.DueAtUtc <= now)
                 {
                     ready ??= new List<IDisposable>();
                     ready.Add(entry.Disposable);
@@ -2604,9 +2617,12 @@ public static class EffectorRuntime
 
         if (ready is not null)
         {
-            for (var index = 0; index < ready.Count; index++)
+            lock (DeferredRenderResourceAccessSync)
             {
-                ready[index].Dispose();
+                for (var index = 0; index < ready.Count; index++)
+                {
+                    ready[index].Dispose();
+                }
             }
         }
     }

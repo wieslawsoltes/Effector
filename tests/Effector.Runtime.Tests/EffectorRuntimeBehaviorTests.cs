@@ -469,7 +469,7 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
-    public void DeferredRenderResources_Are_Not_Disposed_From_Different_Thread()
+    public void DeferredRenderResources_Can_Be_Disposed_From_Different_Thread_After_Delay()
     {
         ForceDrainDeferredRenderResources();
 
@@ -495,15 +495,13 @@ public sealed class EffectorRuntimeBehaviorTests
             Thread.Sleep(TimeSpan.FromMilliseconds(250));
             DrainDeferredRenderResources(force: false);
 
-            Assert.False(disposable.IsDisposed);
+            Assert.True(disposable.IsDisposed);
         }
         finally
         {
             worker?.Join();
             ForceDrainDeferredRenderResources();
         }
-
-        Assert.True(disposable.IsDisposed);
     }
 
     [Fact]
