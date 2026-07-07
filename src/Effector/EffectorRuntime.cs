@@ -1835,10 +1835,11 @@ public static class EffectorRuntime
                 TraceShaderPhase(frame.Effect, "end:capture-context-closed");
                 TraceShaderPhase(frame.Effect, "end:snapshot-ok");
                 SaveShaderSnapshot(frame.Effect, snapshot);
-                var contentBounds = ResolveRenderedContentBounds(snapshot, frame.LocalEffectBounds);
-                var globalContentBounds = contentBounds.IsEmpty
-                    ? frame.DeviceEffectBounds
-                    : OffsetRect(contentBounds, frame.IntermediateSurfaceBounds.Left, frame.IntermediateSurfaceBounds.Top);
+                var contentBounds = frame.LocalEffectBounds;
+                var globalContentBounds = OffsetRect(
+                    contentBounds,
+                    frame.IntermediateSurfaceBounds.Left,
+                    frame.IntermediateSurfaceBounds.Top);
                 TraceShaderFrame(
                     frame.Effect,
                     frame.EffectBounds,
@@ -1864,7 +1865,7 @@ public static class EffectorRuntime
                             frame.UsedRenderThreadBounds,
                             frame.IntermediateSurfaceBounds));
                 }
-                var overlayContentBounds = contentBounds.IsEmpty ? frame.LocalEffectBounds : contentBounds;
+                var overlayContentBounds = contentBounds;
                 var normalizedOverlayBounds = NormalizeRectToOrigin(overlayContentBounds);
                 var overlayDestinationBounds = OffsetRect(
                     normalizedOverlayBounds,
@@ -2624,100 +2625,6 @@ public static class EffectorRuntime
             rect.Y - padding.Top,
             rect.Width + padding.Left + padding.Right,
             rect.Height + padding.Top + padding.Bottom);
-
-    private static SKRect ResolveRenderedContentBounds(SKImage snapshot, SKRect fallbackBounds)
-    {
-        using var bitmap = SKBitmap.FromImage(snapshot);
-        if (bitmap is null || bitmap.Width <= 0 || bitmap.Height <= 0)
-        {
-            return fallbackBounds;
-        }
-
-        var scanLeft = Math.Max(0, (int)Math.Floor(fallbackBounds.Left));
-        var scanTop = Math.Max(0, (int)Math.Floor(fallbackBounds.Top));
-        var scanRight = Math.Min(bitmap.Width, (int)Math.Ceiling(fallbackBounds.Right));
-        var scanBottom = Math.Min(bitmap.Height, (int)Math.Ceiling(fallbackBounds.Bottom));
-        if (scanLeft >= scanRight || scanTop >= scanBottom)
-        {
-            return SKRect.Empty;
-        }
-
-        var info = bitmap.Info;
-        if (info.BytesPerPixel != 4)
-        {
-            return fallbackBounds;
-        }
-
-        var pixels = bitmap.Bytes;
-        if (pixels is null || pixels.Length == 0)
-        {
-            return fallbackBounds;
-        }
-        var rowBytes = bitmap.RowBytes;
-        var bytesPerPixel = info.BytesPerPixel;
-        var alphaOffset = bytesPerPixel - 1;
-
-        static bool RowHasVisiblePixels(byte[] pixels, int rowBytes, int bytesPerPixel, int alphaOffset, int y, int left, int right)
-        {
-            var rowStart = y * rowBytes;
-            for (var x = left; x < right; x++)
-            {
-                if (pixels[rowStart + (x * bytesPerPixel) + alphaOffset] != 0)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        static bool ColumnHasVisiblePixels(byte[] pixels, int rowBytes, int bytesPerPixel, int alphaOffset, int x, int top, int bottom)
-        {
-            var pixelOffset = (x * bytesPerPixel) + alphaOffset;
-            for (var y = top; y < bottom; y++)
-            {
-                if (pixels[(y * rowBytes) + pixelOffset] != 0)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        var top = scanTop;
-        while (top < scanBottom && !RowHasVisiblePixels(pixels, rowBytes, bytesPerPixel, alphaOffset, top, scanLeft, scanRight))
-        {
-            top++;
-        }
-
-        if (top >= scanBottom)
-        {
-            return SKRect.Empty;
-        }
-
-        var bottom = scanBottom - 1;
-        while (bottom >= top && !RowHasVisiblePixels(pixels, rowBytes, bytesPerPixel, alphaOffset, bottom, scanLeft, scanRight))
-        {
-            bottom--;
-        }
-
-        var left = scanLeft;
-        while (left < scanRight && !ColumnHasVisiblePixels(pixels, rowBytes, bytesPerPixel, alphaOffset, left, top, bottom + 1))
-        {
-            left++;
-        }
-
-        var right = scanRight - 1;
-        while (right >= left && !ColumnHasVisiblePixels(pixels, rowBytes, bytesPerPixel, alphaOffset, right, top, bottom + 1))
-        {
-            right--;
-        }
-
-        return left <= right && top <= bottom
-            ? new SKRect(left, top, right + 1, bottom + 1)
-            : SKRect.Empty;
-    }
 
     private static bool DrawMaskedShaderOverlay(
         object drawingContext,
