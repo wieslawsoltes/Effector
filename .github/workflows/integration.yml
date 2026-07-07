@@ -119,6 +119,7 @@ jobs:
       - name: Upload integration test results
         uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: package-integration-test-results
           path: artifacts/test/integration/**/*.trx
