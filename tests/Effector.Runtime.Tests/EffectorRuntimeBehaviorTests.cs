@@ -469,6 +469,44 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void DeferredRenderResources_Are_Not_Disposed_From_Different_Thread()
+    {
+        ForceDrainDeferredRenderResources();
+
+        var disposable = new TrackingDisposable();
+        using var scheduled = new ManualResetEventSlim();
+        Thread? worker = null;
+
+        try
+        {
+            worker = new Thread(() =>
+            {
+                ScheduleDeferredRenderResources(disposable);
+                scheduled.Set();
+            })
+            {
+                IsBackground = true
+            };
+            worker.Start();
+
+            Assert.True(scheduled.Wait(TimeSpan.FromSeconds(5)));
+            worker.Join();
+
+            Thread.Sleep(TimeSpan.FromMilliseconds(250));
+            DrainDeferredRenderResources(force: false);
+
+            Assert.False(disposable.IsDisposed);
+        }
+        finally
+        {
+            worker?.Join();
+            ForceDrainDeferredRenderResources();
+        }
+
+        Assert.True(disposable.IsDisposed);
+    }
+
+    [Fact]
     public void DeferredRenderResources_Do_Not_Depend_On_Host_Invalidation()
     {
         var scheduleMethod = typeof(EffectorRuntime).GetMethod(
@@ -3655,14 +3693,17 @@ public sealed class EffectorRuntimeBehaviorTests
         method!.Invoke(null, new object[] { disposable });
     }
 
-    private static void ForceDrainDeferredRenderResources()
+    private static void ForceDrainDeferredRenderResources() =>
+        DrainDeferredRenderResources(force: true);
+
+    private static void DrainDeferredRenderResources(bool force)
     {
         var method = typeof(EffectorRuntime).GetMethod(
             "DrainDeferredRenderResources",
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        method!.Invoke(null, new object[] { true });
+        method!.Invoke(null, new object[] { force });
     }
 
     private static string GetScreenshotPath(string fileName)
