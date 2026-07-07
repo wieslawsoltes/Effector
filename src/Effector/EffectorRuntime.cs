@@ -14,7 +14,6 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Platform;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SkiaSharp;
 
@@ -81,15 +80,18 @@ public static class EffectorRuntime
 
     private sealed class DeferredRenderResourceEntry
     {
-        public DeferredRenderResourceEntry(IDisposable disposable, DateTime dueAtUtc)
+        public DeferredRenderResourceEntry(IDisposable disposable, DateTime dueAtUtc, int managedThreadId)
         {
             Disposable = disposable;
             DueAtUtc = dueAtUtc;
+            ManagedThreadId = managedThreadId;
         }
 
         public IDisposable Disposable { get; }
 
         public DateTime DueAtUtc { get; }
+
+        public int ManagedThreadId { get; }
     }
 
     private sealed class DeferredRenderResourceBundle : IDisposable
@@ -2568,39 +2570,35 @@ public static class EffectorRuntime
             DeferredRenderResources.Enqueue(
                 new DeferredRenderResourceEntry(
                     disposable,
-                    DateTime.UtcNow + DeferredRenderResourceDisposeDelay));
+                    DateTime.UtcNow + DeferredRenderResourceDisposeDelay,
+                    Environment.CurrentManagedThreadId));
         }
-
-        // Dispose on the UI dispatcher after the grace period instead of invalidating the host
-        // visual. Invalidating here creates a self-sustaining redraw loop for otherwise static
-        // shader effects, which in turn keeps allocating capture surfaces and snapshots.
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            DispatcherTimer.RunOnce(
-                static () => DrainDeferredRenderResources(force: false),
-                DeferredRenderResourceDisposeDelay);
-            return;
-        }
-
-        Dispatcher.UIThread.Post(
-            static () => DispatcherTimer.RunOnce(
-                static () => DrainDeferredRenderResources(force: false),
-                DeferredRenderResourceDisposeDelay),
-            DispatcherPriority.Background);
     }
 
     private static void DrainDeferredRenderResources(bool force)
     {
         List<IDisposable>? ready = null;
+        var currentManagedThreadId = Environment.CurrentManagedThreadId;
 
         lock (DeferredRenderResourceSync)
         {
             var now = DateTime.UtcNow;
-            while (DeferredRenderResources.Count > 0 &&
-                   (force || DeferredRenderResources.Peek().DueAtUtc <= now))
+            var count = DeferredRenderResources.Count;
+            for (var index = 0; index < count; index++)
             {
-                ready ??= new List<IDisposable>();
-                ready.Add(DeferredRenderResources.Dequeue().Disposable);
+                var entry = DeferredRenderResources.Dequeue();
+                // GPU-backed Skia objects are disposed only on the thread that scheduled them.
+                // A forced drain is reserved for controlled teardown and tests.
+                if ((force || entry.DueAtUtc <= now) &&
+                    (force || entry.ManagedThreadId == currentManagedThreadId))
+                {
+                    ready ??= new List<IDisposable>();
+                    ready.Add(entry.Disposable);
+                }
+                else
+                {
+                    DeferredRenderResources.Enqueue(entry);
+                }
             }
         }
 
