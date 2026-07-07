@@ -484,6 +484,16 @@ public sealed class EffectorRuntimeBehaviorTests
     }
 
     [Fact]
+    public void ShaderOverlayBounds_Do_Not_Depend_On_Snapshot_Readback()
+    {
+        var resolveContentBoundsMethod = typeof(EffectorRuntime).GetMethod(
+            "ResolveRenderedContentBounds",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.Null(resolveContentBoundsMethod);
+    }
+
+    [Fact]
     public void ShaderCaptureSnapshot_Remains_Usable_After_SourceSurface_Is_Disposed()
     {
         var expectedColor = new SKColor(64, 140, 226, 255);
